@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import date
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from .config import DATA_GOV_SG_API_KEY, DATA_GOV_SG_BASE_URL
 
@@ -11,9 +13,24 @@ class DataGovError(RuntimeError):
     """Raised when an official data.gov.sg request fails."""
 
 
+_SESSION = requests.Session()
+_SESSION.mount(
+    "https://",
+    HTTPAdapter(
+        max_retries=Retry(
+            total=4,
+            backoff_factor=1,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=("GET",),
+            respect_retry_after_header=True,
+        )
+    ),
+)
+
+
 def _get(path: str, params: dict | None = None) -> dict:
     headers = {"x-api-key": DATA_GOV_SG_API_KEY} if DATA_GOV_SG_API_KEY else {}
-    response = requests.get(
+    response = _SESSION.get(
         f"{DATA_GOV_SG_BASE_URL}/{path}", headers=headers, params=params, timeout=20
     )
     response.raise_for_status()
