@@ -1,69 +1,128 @@
 # Singapore Haze Monitor
 
-Singapore air-quality monitoring and forecasting platform built as a portfolio project.
+A full-stack air-quality dashboard built around official Singapore readings, auditable data cleaning, and an explicitly experimental short-term PM2.5 model.
 
-The project ingests official PSI and PM2.5 readings from Singapore's data.gov.sg APIs, validates and stores observations, and exposes a small Flask API for a React dashboard. The initial version prioritises data quality, transparent timestamps, and a clear separation between official observations and future experimental forecasts.
+The product answers three different questions without conflating them:
 
-## Repository layout
+- **What is the air like now?** Regional 1-hour PM2.5 readings and official NEA bands.
+- **What has prolonged exposure been like?** Rolling 24-hour PSI and profile-specific official activity guidance.
+- **What might happen over the next three hours?** A small autoregressive model, shown with validation error, a naïve baseline, and uncertainty ranges.
+
+> This is an educational portfolio project, not an official forecast or medical service. Always use [haze.gov.sg](https://www.haze.gov.sg/) and MOH guidance for decisions.
+
+## Highlights
+
+- Live and historical PSI / PM2.5 ingestion from data.gov.sg
+- Five-region dashboard with clear freshness and stale-data states
+- Schema validation, deduplication, range checks, and review flags for unusual spikes
+- Retry and backoff for upstream rate limits; last-known-valid data remains available during outages
+- Seven-day signal chart, 3-hour moving average, and auditable CSV export
+- Health-profile guidance that keeps immediate PM2.5 context separate from 24-hour PSI exposure guidance
+- Gap-safe autoregressive OLS model with chronological holdout evaluation against persistence
+- Responsive loading, error, empty, and insufficient-data states
+- Isolated backend tests, reproducible frontend lockfile, CI, and production container
+
+## Architecture
 
 ```text
-backend/       Flask API, ingestion client, database layer, tests
-frontend/      React/Vite dashboard
-docs/          Architecture and methodology notes
+data.gov.sg PSI + PM2.5 APIs
+             │
+             ▼
+  retry → normalise → validate → deduplicate
+             │
+             ▼
+     SQLite (local / single instance)
+             │
+             ▼
+ Flask JSON + CSV API ── React dashboard
+             │
+             └── OLS analysis on latest contiguous hourly segment
 ```
 
-## Quick start
+The API key, if one is supplied, stays on the server. Source observation time, provider update time, ingestion time, quality status, and quality notes are stored separately.
 
-### Backend
+## Run locally
+
+Requirements: Python 3.12+ and Node.js 22+.
 
 ```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
+git clone https://github.com/Chuyue363/singapore-haze-monitor.git
+cd singapore-haze-monitor
+
+python3 -m venv backend/.venv
+source backend/.venv/bin/activate
+pip install -r backend/requirements.txt
+cp backend/.env.example backend/.env
+
+PYTHONPATH=backend python -m ingestion.backfill --days 7
 python -m app
 ```
 
-The API runs at `http://localhost:5000`.
-
-To fetch the latest official readings into the local database:
-
-```bash
-python -m ingestion.run_once
-```
-
-SQLite is used by default for local development. The schema is intentionally designed for a later PostgreSQL adapter; the current first milestone keeps the local setup dependency-light.
-
-### Frontend
+The backend starts on `http://localhost:5050`. In another terminal:
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-The Vite development server proxies `/api` requests to the Flask backend.
+Open `http://localhost:5173`. Vite proxies `/api` to port 5050; override that with `VITE_API_PROXY` if needed.
 
-## Data sources
+## Test and build
 
-- PSI: `https://api-open.data.gov.sg/v2/real-time/api/psi`
-- 1-hour PM2.5: `https://api-open.data.gov.sg/v2/real-time/api/pm25`
+```bash
+backend/.venv/bin/python -m pytest -q backend/tests
+npm --prefix frontend run build
+```
 
-The backend keeps source timestamps and marks the provider on every stored observation. API keys belong in the backend environment, never in the browser.
+CI repeats both checks and builds the production container on every push and pull request.
 
-## Current status
+## API
 
-- [x] Official PSI and PM2.5 client
-- [x] Normalised observation schema
-- [x] SQLite development database
-- [x] Flask latest/history endpoints
-- [x] React regional dashboard
-- [ ] Scheduled production worker
-- [ ] Weather and hotspot enrichment
-- [ ] Walk-forward forecast evaluation
-- [ ] Alerts and notification preferences
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/health` | Service, freshness, database, and last-ingestion status |
+| `GET /api/readings/latest` | Latest reading for all five regions; refreshes stale data |
+| `GET /api/readings/history?region=central&limit=168` | Chronological regional history |
+| `GET /api/readings/export.csv?region=central` | Auditable regional CSV export |
+| `GET /api/analysis/regression?region=central&horizon=3` | Model metrics and bounded forecast horizon |
+| `GET /api/summary` | Compact dataset and current-reading summary |
 
-## Important caveat
+## Model methodology
 
-This project is an educational portfolio project and is not a replacement for NEA or MOH guidance. The interface should link to official advisories and show the freshness of every reading.
+The current model predicts 1-hour PM2.5 using the previous hour, trailing 3-hour mean, and trailing 3-hour trend. It:
+
+1. deduplicates observations by timestamp;
+2. uses only the latest uninterrupted hourly segment;
+3. reserves the newest 20% of samples as a chronological holdout;
+4. reports MAE beside a persistence baseline (the previous value); and
+5. refits on all eligible observations only after evaluation, for the displayed three-hour recursive estimate.
+
+The interval is an approximate residual-based range. It does not capture weather, wind, fire, satellite, or policy information and must not be interpreted as an NEA forecast. See [methodology notes](docs/methodology.md) for limitations and next experiments.
+
+## Data sources and interpretation
+
+- [data.gov.sg PSI API](https://api-open.data.gov.sg/v2/real-time/api/psi)
+- [data.gov.sg PM2.5 API](https://api-open.data.gov.sg/v2/real-time/api/pm25)
+- [NEA haze portal](https://www.haze.gov.sg/)
+
+Singapore's 24-hour PSI and 1-hour PM2.5 are different measures. The dashboard preserves their official names, units, bands, and intended time horizons instead of converting them into a foreign AQI.
+
+## Production
+
+Build a single container that serves the React bundle and Flask API:
+
+```bash
+docker build -t singapore-haze-monitor .
+docker run --rm -p 8080:8080 -v haze-data:/data singapore-haze-monitor
+```
+
+A production deployment still needs persistent storage and a scheduled call to `python -m ingestion.run_once`. SQLite is appropriate for this single-instance portfolio deployment; use PostgreSQL before horizontally scaling writers.
+
+## Roadmap
+
+- Walk-forward evaluation across multiple haze and non-haze periods
+- Weather, wind, rainfall, and regional hotspot features with source-aware timestamps
+- Scheduled production ingestion and freshness alerting
+- Accessible location-to-region helper
+- User-controlled alerts only after false-positive and notification design is validated

@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 from datetime import datetime, timezone
+from pathlib import Path
 
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
@@ -47,7 +48,8 @@ def _refresh_if_stale(force: bool = False) -> tuple[list[dict], dict]:
 
 
 def create_app() -> Flask:
-    app = Flask(__name__)
+    frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    app = Flask(__name__, static_folder=str(frontend_dist), static_url_path="")
     CORS(app)
     init_db()
 
@@ -65,6 +67,17 @@ def create_app() -> Flask:
             "status": "ok" if age is None or age <= STALE_AFTER_MINUTES * 2 else "degraded",
             "data_age_minutes": age,
             "database": summary,
+        })
+
+    @app.get("/")
+    def frontend():
+        index = frontend_dist / "index.html"
+        if index.exists():
+            return app.send_static_file("index.html")
+        return jsonify({
+            "name": "Singapore Haze Monitor API",
+            "status": "frontend_not_built",
+            "health": "/api/health",
         })
 
     @app.get("/api/readings/latest")

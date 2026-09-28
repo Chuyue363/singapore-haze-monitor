@@ -4,3 +4,4 @@ python-dotenv>=1.0,<2
 requests>=2.31,<3
 numpy>=2.0,<3
 pytest>=8.0,<9
+gunicorn>=23.0,<24
