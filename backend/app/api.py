@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import csv
+import io
 from datetime import datetime, timezone
 
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 
 from .analysis import regression_analysis
@@ -95,6 +97,27 @@ def create_app() -> Flask:
         horizon = request.args.get("horizon", default=3, type=int)
         rows = history(region=region, limit=1000)
         return jsonify({"region": region, "analysis": regression_analysis(rows, horizon=horizon)})
+
+    @app.get("/api/readings/export.csv")
+    def export_history():
+        region = request.args.get("region", "central").lower()
+        if region not in REGIONS:
+            return jsonify({"error": "Unknown region", "allowed": REGIONS}), 400
+        limit = request.args.get("limit", default=1000, type=int)
+        rows = list(reversed(history(region=region, limit=limit)))
+        columns = [
+            "region", "reading_timestamp", "updated_timestamp", "psi_24h", "pm25_1h",
+            "pm25_24h", "source", "quality_status", "quality_notes",
+        ]
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=columns, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+        return Response(
+            output.getvalue(),
+            mimetype="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={region}-air-quality.csv"},
+        )
 
     @app.get("/api/summary")
     def summary():

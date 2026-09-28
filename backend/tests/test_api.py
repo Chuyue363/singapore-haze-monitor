@@ -53,3 +53,24 @@ def test_cleaning_rejects_bad_region_and_deduplicates():
 def test_unknown_region_is_rejected():
     client = create_app().test_client()
     assert client.get("/api/readings/history?region=moon").status_code == 400
+
+
+def test_csv_export_has_auditable_fields():
+    insert_readings([
+        {
+            "region": "central",
+            "reading_timestamp": datetime.now(timezone.utc).isoformat(),
+            "updated_timestamp": datetime.now(timezone.utc).isoformat(),
+            "psi_24h": 80,
+            "pm25_1h": 42,
+            "pm25_24h": 30,
+            "source": "test",
+        }
+    ])
+    response = create_app().test_client().get("/api/readings/export.csv?region=central")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert response.mimetype == "text/csv"
+    assert "quality_status" in body
+    assert "central" in body

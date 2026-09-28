@@ -7,6 +7,11 @@ import {
 import './styles.css'
 
 const REGIONS = ['north', 'south', 'east', 'west', 'central']
+const HEALTH_PROFILES = [
+  { id: 'healthy', label: 'Healthy adult' },
+  { id: 'sensitive', label: 'Sensitive group' },
+  { id: 'chronic', label: 'Heart / lung condition' },
+]
 
 function psiBand(value) {
   if (value == null) return { label: 'Awaiting data', tone: 'unknown', guidance: 'No current reading is available.' }
@@ -23,6 +28,22 @@ function pmBand(value) {
   if (value <= 150) return 'Elevated'
   if (value <= 250) return 'High'
   return 'Very high'
+}
+
+function psiGuidance(value, profile) {
+  if (value == null) return 'No current PSI reading is available.'
+  if (value <= 100) return 'Normal activities can continue.'
+  if (profile === 'chronic') {
+    return value <= 200
+      ? 'Avoid prolonged or strenuous outdoor physical exertion.'
+      : 'Avoid outdoor activity.'
+  }
+  if (profile === 'sensitive') {
+    if (value <= 200) return 'Minimise prolonged or strenuous outdoor physical exertion.'
+    return value <= 300 ? 'Minimise outdoor activity.' : 'Avoid outdoor activity.'
+  }
+  if (value <= 200) return 'Reduce prolonged or strenuous outdoor physical exertion.'
+  return value <= 300 ? 'Avoid prolonged or strenuous outdoor physical exertion.' : 'Minimise outdoor activity.'
 }
 
 function localTime(value, options = {}) {
@@ -72,6 +93,7 @@ function App() {
   const [analysis, setAnalysis] = useState(null)
   const [meta, setMeta] = useState(null)
   const [selected, setSelected] = useState('central')
+  const [healthProfile, setHealthProfile] = useState('healthy')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
@@ -109,9 +131,15 @@ function App() {
   const byRegion = useMemo(() => Object.fromEntries(readings.map(row => [row.region, row])), [readings])
   const selectedReading = byRegion[selected]
   const selectedStatus = psiBand(selectedReading?.psi_24h)
-  const chartData = useMemo(() => history.map(row => ({
-    ...row, label: localTime(row.reading_timestamp, { day: true })
-  })), [history])
+  const chartData = useMemo(() => history.map((row, index, allRows) => {
+    const window = allRows.slice(Math.max(0, index - 2), index + 1)
+      .map(item => item.pm25_1h).filter(value => value != null)
+    return {
+      ...row,
+      label: localTime(row.reading_timestamp, { day: true }),
+      pm25_ma3: window.length ? Math.round(window.reduce((sum, value) => sum + value, 0) / window.length * 10) / 10 : null,
+    }
+  }), [history])
   const highest = useMemo(() => readings.reduce((best, row) =>
     (row.pm25_1h ?? -1) > (best?.pm25_1h ?? -1) ? row : best, null), [readings])
 
@@ -154,7 +182,10 @@ function App() {
         <article className="panel chart-panel">
           <div className="panel-header">
             <div><p className="eyebrow">7-DAY SIGNAL</p><h2>{selected} PM2.5 trend</h2></div>
-            <div className="region-tabs" role="tablist">{REGIONS.map(region => <button className={selected === region ? 'active' : ''} onClick={() => setSelected(region)} key={region}>{region}</button>)}</div>
+            <div className="chart-actions">
+              <a className="export-link" href={`/api/readings/export.csv?region=${selected}&limit=1000`}>Export CSV ↓</a>
+              <div className="region-tabs" role="tablist" aria-label="Select air quality region">{REGIONS.map(region => <button className={selected === region ? 'active' : ''} onClick={() => setSelected(region)} key={region}>{region}</button>)}</div>
+            </div>
           </div>
           <div className="chart-wrap">
             {chartData.length > 1 ? <ResponsiveContainer width="100%" height="100%">
@@ -163,15 +194,18 @@ function App() {
                 <CartesianGrid stroke="#e9edf3" vertical={false}/><XAxis dataKey="label" tick={{fontSize: 11}} minTickGap={48} axisLine={false} tickLine={false}/><YAxis tick={{fontSize: 11}} axisLine={false} tickLine={false}/>
                 <Tooltip contentStyle={{borderRadius: 12, border: '1px solid #e2e7ef'}} labelStyle={{color:'#667085'}} formatter={(value) => [`${value} µg/m³`, 'PM2.5']}/>
                 <Area type="monotone" dataKey="pm25_1h" stroke="#246bfd" strokeWidth={2.5} fill="url(#pmFill)" connectNulls/>
+                <Line type="monotone" dataKey="pm25_ma3" name="3-hour average" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="5 5" dot={false} connectNulls/>
               </AreaChart>
             </ResponsiveContainer> : <div className="empty-chart"><span>Collecting history</span><p>Run the backfill command to populate a seven-day trend and unlock regression analysis.</p></div>}
           </div>
         </article>
 
         <aside className={`panel decision-panel ${selectedStatus.tone}`}>
-          <p className="eyebrow">ACTIVITY CONTEXT</p><h2>{selectedStatus.label}</h2>
-          <p className="decision-copy">{selectedStatus.guidance}</p>
+          <p className="eyebrow">24-HOUR EXPOSURE CONTEXT</p><h2>{selectedStatus.label}</h2>
+          <div className="profile-tabs" aria-label="Choose health profile">{HEALTH_PROFILES.map(profile => <button key={profile.id} className={healthProfile === profile.id ? 'active' : ''} onClick={() => setHealthProfile(profile.id)}>{profile.label}</button>)}</div>
+          <p className="decision-copy">{psiGuidance(selectedReading?.psi_24h, healthProfile)}</p>
           <dl><div><dt>24-hour PSI</dt><dd>{selectedReading?.psi_24h ?? '—'}</dd></div><div><dt>1-hour PM2.5</dt><dd>{selectedReading?.pm25_1h ?? '—'} <small>µg/m³</small></dd></div><div><dt>Region</dt><dd className="capitalize">{selected}</dd></div></dl>
+          <p className="immediate-note"><strong>{pmBand(selectedReading?.pm25_1h)} now.</strong> Use 1-hour PM2.5 for immediate decisions and 24-hour PSI for prolonged exposure.</p>
           <a href="https://www.haze.gov.sg/" target="_blank" rel="noreferrer">Check official advisory ↗</a>
         </aside>
       </section>
@@ -189,7 +223,7 @@ function App() {
             <p className="eyebrow">VALIDATION</p>
             <h3>{analysis?.status === 'ready' ? (analysis.beats_naive ? 'Model beats persistence' : 'Baseline remains stronger') : 'Pending sufficient data'}</h3>
             <div className="metric-list"><div><span>Validation MAE</span><strong>{analysis?.validation_mae ?? '—'}</strong></div><div><span>Naïve MAE</span><strong>{analysis?.naive_mae ?? '—'}</strong></div><div><span>R²</span><strong>{analysis?.r_squared ?? '—'}</strong></div><div><span>Observations</span><strong>{analysis?.observations ?? analysis?.available ?? 0}</strong></div></div>
-            <p className="fine-print">The forecast is experimental and never replaces NEA forecasts or health guidance. Confidence ranges reflect historical residual variation, not all sources of uncertainty.</p>
+            <p className="fine-print">The forecast is experimental and never replaces NEA forecasts or health guidance. Only the latest uninterrupted hourly sequence is modelled. Confidence ranges reflect historical residual variation, not all sources of uncertainty.</p>
           </article>
         </div>
       </section>

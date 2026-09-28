@@ -15,6 +15,20 @@ def _series(rows: list[dict]) -> list[tuple[datetime, float]]:
     return sorted((datetime.fromisoformat(ts), value) for ts, value in unique.items())
 
 
+def _latest_contiguous_segment(
+    points: list[tuple[datetime, float]],
+) -> tuple[list[tuple[datetime, float]], int]:
+    if not points:
+        return [], 0
+    last_gap = 0
+    gap_count = 0
+    for index in range(1, len(points)):
+        if points[index][0] - points[index - 1][0] != timedelta(hours=1):
+            gap_count += 1
+            last_gap = index
+    return points[last_gap:], gap_count
+
+
 def _features(values: list[float], index: int) -> list[float]:
     last3 = values[index - 3:index]
     trend = values[index - 1] - values[index - 3]
@@ -22,13 +36,16 @@ def _features(values: list[float], index: int) -> list[float]:
 
 
 def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
-    points = _series(rows)
+    all_points = _series(rows)
+    points, gap_count = _latest_contiguous_segment(all_points)
     if len(points) < 20:
         return {
             "status": "insufficient_data",
             "required": 20,
             "available": len(points),
-            "message": "At least 20 hourly observations are required for regression analysis.",
+            "total_observations": len(all_points),
+            "gap_count": gap_count,
+            "message": "At least 20 consecutive hourly observations are required for regression analysis.",
         }
 
     timestamps = [point[0] for point in points]
@@ -73,6 +90,8 @@ def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
         "method": "Autoregressive ordinary least squares",
         "features": ["previous hour", "three-hour mean", "three-hour trend"],
         "observations": len(points),
+        "total_observations": len(all_points),
+        "gap_count": gap_count,
         "training_samples": len(y),
         "r_squared": round(r_squared, 3),
         "validation_mae": round(model_mae, 2),
