@@ -13,3 +13,4 @@ DATA_GOV_SG_API_KEY = os.getenv("DATA_GOV_SG_API_KEY", "")
 DATA_GOV_SG_BASE_URL = os.getenv(
     "DATA_GOV_SG_BASE_URL", "https://api-open.data.gov.sg/v2/real-time/api"
 )
+STALE_AFTER_MINUTES = int(os.getenv("STALE_AFTER_MINUTES", "30"))
