@@ -23,6 +23,7 @@ rad.json
 TestResults.xml
 .env
 *.sqlite3
+*.sqlite3-*
 __pycache__/
 *.py[cod]
 .pytest_cache/

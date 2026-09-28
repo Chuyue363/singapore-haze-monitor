@@ -1,71 +1,204 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import {
+  Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer,
+  Tooltip, XAxis, YAxis
+} from 'recharts'
 import './styles.css'
 
-const regions = ['north', 'south', 'east', 'west', 'central']
+const REGIONS = ['north', 'south', 'east', 'west', 'central']
 
-function band(psi) {
-  if (psi == null) return { label: 'No reading', className: 'unknown' }
-  if (psi <= 50) return { label: 'Good', className: 'good' }
-  if (psi <= 100) return { label: 'Moderate', className: 'moderate' }
-  if (psi <= 200) return { label: 'Unhealthy', className: 'unhealthy' }
-  if (psi <= 300) return { label: 'Very unhealthy', className: 'very-unhealthy' }
-  return { label: 'Hazardous', className: 'hazardous' }
+function psiBand(value) {
+  if (value == null) return { label: 'Awaiting data', tone: 'unknown', guidance: 'No current reading is available.' }
+  if (value <= 50) return { label: 'Good', tone: 'good', guidance: 'Normal activities can continue.' }
+  if (value <= 100) return { label: 'Moderate', tone: 'moderate', guidance: 'Normal activities can generally continue.' }
+  if (value <= 200) return { label: 'Unhealthy', tone: 'unhealthy', guidance: 'Reduce prolonged or strenuous outdoor activity.' }
+  if (value <= 300) return { label: 'Very unhealthy', tone: 'very-unhealthy', guidance: 'Avoid prolonged or strenuous outdoor activity.' }
+  return { label: 'Hazardous', tone: 'hazardous', guidance: 'Minimise outdoor activity and follow official guidance.' }
+}
+
+function pmBand(value) {
+  if (value == null) return 'No reading'
+  if (value <= 55) return 'Normal'
+  if (value <= 150) return 'Elevated'
+  if (value <= 250) return 'High'
+  return 'Very high'
+}
+
+function localTime(value, options = {}) {
+  if (!value) return '—'
+  return new Intl.DateTimeFormat('en-SG', {
+    timeZone: 'Asia/Singapore', hour: '2-digit', minute: '2-digit',
+    day: options.day ? 'numeric' : undefined, month: options.day ? 'short' : undefined,
+  }).format(new Date(value))
+}
+
+async function requestJSON(url) {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`Request failed (${response.status})`)
+  return response.json()
+}
+
+function Skeleton({ className = '' }) {
+  return <span className={`skeleton ${className}`} aria-hidden="true" />
+}
+
+function RegionCard({ region, reading, selected, onSelect }) {
+  const status = psiBand(reading?.psi_24h)
+  return (
+    <button className={`region-card ${status.tone} ${selected ? 'selected' : ''}`} onClick={onSelect}>
+      <span className="card-top"><span className="region-name">{region}</span><span className="live-dot" /></span>
+      <span className="metric-kicker">24-hour PSI</span>
+      <span className="psi-number">{reading?.psi_24h ?? '—'}</span>
+      <span className="band-label">{status.label}</span>
+      <span className="card-divider" />
+      <span className="micro-row"><span>1-hour PM2.5</span><strong>{reading?.pm25_1h ?? '—'} <small>µg/m³</small></strong></span>
+      <span className="micro-row"><span>Current band</span><strong>{pmBand(reading?.pm25_1h)}</strong></span>
+    </button>
+  )
+}
+
+function LoadingCards() {
+  return <section className="region-grid">{REGIONS.map(region => (
+    <article className="region-card loading" key={region}>
+      <Skeleton className="short"/><Skeleton className="number"/><Skeleton/><Skeleton/>
+    </article>
+  ))}</section>
 }
 
 function App() {
   const [readings, setReadings] = useState([])
+  const [history, setHistory] = useState([])
+  const [analysis, setAnalysis] = useState(null)
+  const [meta, setMeta] = useState(null)
+  const [selected, setSelected] = useState('central')
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    fetch('/api/readings/latest')
-      .then((response) => {
-        if (!response.ok) throw new Error('Backend request failed')
-        return response.json()
-      })
-      .then((payload) => setReadings(payload.data))
-      .catch(() => setError('No stored readings yet. Run the ingestion job first.'))
+  const loadLatest = useCallback(async (force = false) => {
+    if (force) setRefreshing(true)
+    try {
+      const payload = await requestJSON(`/api/readings/latest${force ? '?refresh=true' : ''}`)
+      setReadings(payload.data)
+      setMeta(payload.meta)
+      setError('')
+    } catch (err) {
+      setError('Live readings are temporarily unavailable. Please try again shortly.')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
   }, [])
 
-  const byRegion = Object.fromEntries(readings.map((reading) => [reading.region, reading]))
-  const latestTimestamp = readings[0]?.updated_timestamp
+  useEffect(() => { loadLatest() }, [loadLatest])
+  useEffect(() => {
+    let active = true
+    Promise.all([
+      requestJSON(`/api/readings/history?region=${selected}&limit=168`),
+      requestJSON(`/api/analysis/regression?region=${selected}&horizon=3`),
+    ]).then(([historyPayload, analysisPayload]) => {
+      if (active) {
+        setHistory(historyPayload.data)
+        setAnalysis(analysisPayload.analysis)
+      }
+    }).catch(() => active && setAnalysis({ status: 'unavailable' }))
+    return () => { active = false }
+  }, [selected, readings])
+
+  const byRegion = useMemo(() => Object.fromEntries(readings.map(row => [row.region, row])), [readings])
+  const selectedReading = byRegion[selected]
+  const selectedStatus = psiBand(selectedReading?.psi_24h)
+  const chartData = useMemo(() => history.map(row => ({
+    ...row, label: localTime(row.reading_timestamp, { day: true })
+  })), [history])
+  const highest = useMemo(() => readings.reduce((best, row) =>
+    (row.pm25_1h ?? -1) > (best?.pm25_1h ?? -1) ? row : best, null), [readings])
 
   return (
-    <main className="page-shell">
-      <header className="hero">
-        <p className="eyebrow">PORTFOLIO PROJECT · OFFICIAL NEA DATA</p>
-        <h1>Singapore Haze Monitor</h1>
-        <p className="subtitle">Air-quality readings with clear context, timestamps, and source transparency.</p>
+    <main>
+      <nav className="nav-shell">
+        <a className="brand" href="#top"><span className="brand-mark">SG</span><span>ClearSky</span></a>
+        <div className="nav-actions">
+          <span className={`source-pill ${meta?.stale ? 'stale' : ''}`}><span />{meta?.stale ? 'Stored data' : 'Official data live'}</span>
+          <button className="refresh-button" onClick={() => loadLatest(true)} disabled={refreshing}>
+            <span className={refreshing ? 'spin' : ''}>↻</span>{refreshing ? 'Refreshing' : 'Refresh'}
+          </button>
+        </div>
+      </nav>
+
+      <header className="hero" id="top">
+        <div>
+          <p className="eyebrow">SINGAPORE AIR QUALITY · NEA DATA</p>
+          <h1>Know the air<br/>before you step out.</h1>
+          <p className="hero-copy">Current regional readings, transparent data quality, and experimental short-term analysis—without hiding uncertainty.</p>
+        </div>
+        <aside className={`hero-status ${selectedStatus.tone}`}>
+          <span className="metric-kicker">Highest current PM2.5</span>
+          {loading ? <Skeleton className="number"/> : <><strong>{highest?.pm25_1h ?? '—'}</strong><small>µg/m³ · {highest?.region ?? 'No region'}</small></>}
+          <p>{highest ? pmBand(highest.pm25_1h) : 'Waiting for official readings'}</p>
+        </aside>
       </header>
 
-      {error && <div className="notice">{error}</div>}
-      <section className="meta-row">
-        <span>Regions: {readings.length || 0}/5</span>
-        <span>{latestTimestamp ? `Updated ${new Date(latestTimestamp).toLocaleString()}` : 'Waiting for data'}</span>
+      {error && <div className="error-banner" role="alert"><strong>Connection issue</strong><span>{error}</span><button onClick={() => loadLatest(true)}>Try again</button></div>}
+
+      <section className="section-heading">
+        <div><p className="eyebrow">RIGHT NOW</p><h2>Regional overview</h2></div>
+        <p>{meta?.data_age_minutes != null ? `Observed ${Math.round(meta.data_age_minutes)} min ago` : 'Retrieving latest observation'}</p>
+      </section>
+      {loading ? <LoadingCards/> : <section className="region-grid">
+        {REGIONS.map(region => <RegionCard key={region} region={region} reading={byRegion[region]} selected={selected === region} onSelect={() => setSelected(region)} />)}
+      </section>}
+
+      <section className="analysis-grid">
+        <article className="panel chart-panel">
+          <div className="panel-header">
+            <div><p className="eyebrow">7-DAY SIGNAL</p><h2>{selected} PM2.5 trend</h2></div>
+            <div className="region-tabs" role="tablist">{REGIONS.map(region => <button className={selected === region ? 'active' : ''} onClick={() => setSelected(region)} key={region}>{region}</button>)}</div>
+          </div>
+          <div className="chart-wrap">
+            {chartData.length > 1 ? <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}>
+                <defs><linearGradient id="pmFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#246bfd" stopOpacity={.28}/><stop offset="100%" stopColor="#246bfd" stopOpacity={0}/></linearGradient></defs>
+                <CartesianGrid stroke="#e9edf3" vertical={false}/><XAxis dataKey="label" tick={{fontSize: 11}} minTickGap={48} axisLine={false} tickLine={false}/><YAxis tick={{fontSize: 11}} axisLine={false} tickLine={false}/>
+                <Tooltip contentStyle={{borderRadius: 12, border: '1px solid #e2e7ef'}} labelStyle={{color:'#667085'}} formatter={(value) => [`${value} µg/m³`, 'PM2.5']}/>
+                <Area type="monotone" dataKey="pm25_1h" stroke="#246bfd" strokeWidth={2.5} fill="url(#pmFill)" connectNulls/>
+              </AreaChart>
+            </ResponsiveContainer> : <div className="empty-chart"><span>Collecting history</span><p>Run the backfill command to populate a seven-day trend and unlock regression analysis.</p></div>}
+          </div>
+        </article>
+
+        <aside className={`panel decision-panel ${selectedStatus.tone}`}>
+          <p className="eyebrow">ACTIVITY CONTEXT</p><h2>{selectedStatus.label}</h2>
+          <p className="decision-copy">{selectedStatus.guidance}</p>
+          <dl><div><dt>24-hour PSI</dt><dd>{selectedReading?.psi_24h ?? '—'}</dd></div><div><dt>1-hour PM2.5</dt><dd>{selectedReading?.pm25_1h ?? '—'} <small>µg/m³</small></dd></div><div><dt>Region</dt><dd className="capitalize">{selected}</dd></div></dl>
+          <a href="https://www.haze.gov.sg/" target="_blank" rel="noreferrer">Check official advisory ↗</a>
+        </aside>
       </section>
 
-      <section className="region-grid" aria-label="Regional air quality">
-        {regions.map((region) => {
-          const reading = byRegion[region]
-          const status = band(reading?.psi_24h)
-          return (
-            <article className={`region-card ${status.className}`} key={region}>
-              <div className="card-heading"><h2>{region}</h2><span className="status-dot" /></div>
-              <p className="metric-label">24-hour PSI</p>
-              <p className="metric-value">{reading?.psi_24h ?? '—'}</p>
-              <p className="status-label">{status.label}</p>
-              <div className="secondary-metrics">
-                <span>1-hour PM2.5 <strong>{reading?.pm25_1h ?? '—'}</strong> µg/m³</span>
-                <span>24-hour PM2.5 <strong>{reading?.pm25_24h ?? '—'}</strong> µg/m³</span>
-              </div>
-            </article>
-          )
-        })}
+      <section className="model-section">
+        <div className="section-heading"><div><p className="eyebrow">MODEL TRANSPARENCY</p><h2>Experimental three-hour outlook</h2></div><p>Autoregressive OLS · evaluated out of sample</p></div>
+        <div className="model-grid">
+          <article className="panel forecast-panel">
+            {analysis?.status === 'ready' ? <>
+              <div className="forecast-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={analysis.forecast}><CartesianGrid stroke="#edf0f4" vertical={false}/><XAxis dataKey="timestamp" tickFormatter={v => localTime(v)} axisLine={false} tickLine={false}/><YAxis domain={['auto','auto']} axisLine={false} tickLine={false}/><Tooltip labelFormatter={v => localTime(v, {day:true})}/><Line type="monotone" dataKey="pm25_1h" stroke="#8b5cf6" strokeWidth={3} dot={{r:4}}/></LineChart></ResponsiveContainer></div>
+              <div className="forecast-values">{analysis.forecast.map(item => <div key={item.timestamp}><span>{localTime(item.timestamp)}</span><strong>{item.pm25_1h}</strong><small>{item.lower}–{item.upper} µg/m³</small></div>)}</div>
+            </> : <div className="model-empty"><span className="model-icon">∿</span><h3>Building the evidence base</h3><p>{analysis?.message || 'Analysis becomes available after enough validated hourly readings have been stored.'}</p><small>{analysis?.available ?? 0} / {analysis?.required ?? 20} observations available</small></div>}
+          </article>
+          <article className="panel metrics-panel">
+            <p className="eyebrow">VALIDATION</p>
+            <h3>{analysis?.status === 'ready' ? (analysis.beats_naive ? 'Model beats persistence' : 'Baseline remains stronger') : 'Pending sufficient data'}</h3>
+            <div className="metric-list"><div><span>Validation MAE</span><strong>{analysis?.validation_mae ?? '—'}</strong></div><div><span>Naïve MAE</span><strong>{analysis?.naive_mae ?? '—'}</strong></div><div><span>R²</span><strong>{analysis?.r_squared ?? '—'}</strong></div><div><span>Observations</span><strong>{analysis?.observations ?? analysis?.available ?? 0}</strong></div></div>
+            <p className="fine-print">The forecast is experimental and never replaces NEA forecasts or health guidance. Confidence ranges reflect historical residual variation, not all sources of uncertainty.</p>
+          </article>
+        </div>
       </section>
 
-      <footer>
-        <p>Data source: NEA via data.gov.sg. This project is for educational use; follow official NEA and MOH advisories.</p>
-      </footer>
+      <section className="trust-strip">
+        <div><strong>Official source</strong><span>NEA via data.gov.sg</span></div><div><strong>Visible freshness</strong><span>{meta?.data_age_minutes != null ? `${Math.round(meta.data_age_minutes)} minutes old` : 'Checking'}</span></div><div><strong>Quality policy</strong><span>Spikes are flagged, never silently removed</span></div><div><strong>Last observation</strong><span>{localTime(readings[0]?.reading_timestamp, {day:true})}</span></div>
+      </section>
+
+      <footer><div className="brand"><span className="brand-mark">SG</span><span>ClearSky</span></div><p>Educational portfolio project. Always refer to NEA and MOH for official advisories.</p><a href="https://github.com/Chuyue363/singapore-haze-monitor" target="_blank" rel="noreferrer">View source ↗</a></footer>
     </main>
   )
 }
