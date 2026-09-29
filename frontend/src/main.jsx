@@ -1,10 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import {
-  Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer,
-  Tooltip, XAxis, YAxis
-} from 'recharts'
 import './styles.css'
+
+const HistoryChart = lazy(() => import('./Charts.jsx').then(module => ({ default: module.HistoryChart })))
+const ForecastChart = lazy(() => import('./Charts.jsx').then(module => ({ default: module.ForecastChart })))
 
 const REGIONS = ['north', 'south', 'east', 'west', 'central']
 const HEALTH_PROFILES = [
@@ -62,6 +61,10 @@ async function requestJSON(url) {
 
 function Skeleton({ className = '' }) {
   return <span className={`skeleton ${className}`} aria-hidden="true" />
+}
+
+function ChartLoading() {
+  return <div className="chart-loading" aria-label="Loading chart"><Skeleton/><Skeleton/><Skeleton/></div>
 }
 
 function RegionCard({ region, reading, selected, onSelect }) {
@@ -188,15 +191,7 @@ function App() {
             </div>
           </div>
           <div className="chart-wrap">
-            {chartData.length > 1 ? <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}>
-                <defs><linearGradient id="pmFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#246bfd" stopOpacity={.28}/><stop offset="100%" stopColor="#246bfd" stopOpacity={0}/></linearGradient></defs>
-                <CartesianGrid stroke="#e9edf3" vertical={false}/><XAxis dataKey="label" tick={{fontSize: 11}} minTickGap={48} axisLine={false} tickLine={false}/><YAxis tick={{fontSize: 11}} axisLine={false} tickLine={false}/>
-                <Tooltip contentStyle={{borderRadius: 12, border: '1px solid #e2e7ef'}} labelStyle={{color:'#667085'}} formatter={(value) => [`${value} µg/m³`, 'PM2.5']}/>
-                <Area type="monotone" dataKey="pm25_1h" stroke="#246bfd" strokeWidth={2.5} fill="url(#pmFill)" connectNulls/>
-                <Line type="monotone" dataKey="pm25_ma3" name="3-hour average" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="5 5" dot={false} connectNulls/>
-              </AreaChart>
-            </ResponsiveContainer> : <div className="empty-chart"><span>Collecting history</span><p>Run the backfill command to populate a seven-day trend and unlock regression analysis.</p></div>}
+            {chartData.length > 1 ? <Suspense fallback={<ChartLoading/>}><HistoryChart data={chartData}/></Suspense> : <div className="empty-chart"><span>Collecting history</span><p>Run the backfill command to populate a seven-day trend and unlock regression analysis.</p></div>}
           </div>
         </article>
 
@@ -215,7 +210,7 @@ function App() {
         <div className="model-grid">
           <article className="panel forecast-panel">
             {analysis?.status === 'ready' ? <>
-              <div className="forecast-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={analysis.forecast}><CartesianGrid stroke="#edf0f4" vertical={false}/><XAxis dataKey="timestamp" tickFormatter={v => localTime(v)} axisLine={false} tickLine={false}/><YAxis domain={['auto','auto']} axisLine={false} tickLine={false}/><Tooltip labelFormatter={v => localTime(v, {day:true})}/><Line type="monotone" dataKey="pm25_1h" stroke="#8b5cf6" strokeWidth={3} dot={{r:4}}/></LineChart></ResponsiveContainer></div>
+              <div className="forecast-chart"><Suspense fallback={<ChartLoading/>}><ForecastChart data={analysis.forecast}/></Suspense></div>
               <div className="forecast-values">{analysis.forecast.map(item => <div key={item.timestamp}><span>{localTime(item.timestamp)}</span><strong>{item.pm25_1h}</strong><small>{item.lower}–{item.upper} µg/m³</small></div>)}</div>
             </> : <div className="model-empty"><span className="model-icon">∿</span><h3>Building the evidence base</h3><p>{analysis?.message || 'Analysis becomes available after enough validated hourly readings have been stored.'}</p><small>{analysis?.available ?? 0} / {analysis?.required ?? 20} observations available</small></div>}
           </article>
