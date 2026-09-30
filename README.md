@@ -19,7 +19,7 @@ The product answers three different questions without conflating them:
 - Seven-day signal chart, 3-hour moving average, and auditable CSV export
 - Visible pipeline audit with validated-row, observation, review-flag, and ingestion counts
 - Privacy-preserving town selector mapped to NEA's five reporting regions
-- Health-profile guidance that keeps immediate PM2.5 context separate from 24-hour PSI exposure guidance
+- Official health-profile actions that keep immediate 1-hour PM2.5 guidance separate from 24-hour PSI exposure guidance
 - Gap-safe autoregressive OLS model with expanding-window walk-forward evaluation against persistence
 - Responsive loading, error, empty, and insufficient-data states
 - Isolated backend tests, reproducible frontend lockfile, CI, and production container
@@ -109,6 +109,7 @@ Sparse horizons fall back to an approximate residual-based range. Neither method
 - [data.gov.sg PSI API](https://api-open.data.gov.sg/v2/real-time/api/psi)
 - [data.gov.sg PM2.5 API](https://api-open.data.gov.sg/v2/real-time/api/pm25)
 - [NEA haze portal](https://www.haze.gov.sg/)
+- [NEA 1-hour PM2.5 and 24-hour PSI activity guide](https://www.haze.gov.sg/docs/default-source/posters/haze-pm-psi-guide-a4-english.pdf)
 
 Singapore's 24-hour PSI and 1-hour PM2.5 are different measures. The dashboard preserves their official names, units, bands, and intended time horizons instead of converting them into a foreign AQI.
 

@@ -1,5 +1,6 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import { pmBand, pmGuidance, psiBand, psiGuidance } from './guidance.js'
 import { REGION_TOWNS, regionForTown } from './regions.js'
 import './styles.css'
 
@@ -9,42 +10,9 @@ const ForecastChart = lazy(() => import('./Charts.jsx').then(module => ({ defaul
 const REGIONS = ['north', 'south', 'east', 'west', 'central']
 const HEALTH_PROFILES = [
   { id: 'healthy', label: 'Healthy adult' },
-  { id: 'sensitive', label: 'Sensitive group' },
+  { id: 'sensitive', label: 'Elderly / pregnant / child' },
   { id: 'chronic', label: 'Heart / lung condition' },
 ]
-
-function psiBand(value) {
-  if (value == null) return { label: 'Awaiting data', tone: 'unknown', guidance: 'No current reading is available.' }
-  if (value <= 50) return { label: 'Good', tone: 'good', guidance: 'Normal activities can continue.' }
-  if (value <= 100) return { label: 'Moderate', tone: 'moderate', guidance: 'Normal activities can generally continue.' }
-  if (value <= 200) return { label: 'Unhealthy', tone: 'unhealthy', guidance: 'Reduce prolonged or strenuous outdoor activity.' }
-  if (value <= 300) return { label: 'Very unhealthy', tone: 'very-unhealthy', guidance: 'Avoid prolonged or strenuous outdoor activity.' }
-  return { label: 'Hazardous', tone: 'hazardous', guidance: 'Minimise outdoor activity and follow official guidance.' }
-}
-
-function pmBand(value) {
-  if (value == null) return 'No reading'
-  if (value <= 55) return 'Normal'
-  if (value <= 150) return 'Elevated'
-  if (value <= 250) return 'High'
-  return 'Very high'
-}
-
-function psiGuidance(value, profile) {
-  if (value == null) return 'No current PSI reading is available.'
-  if (value <= 100) return 'Normal activities can continue.'
-  if (profile === 'chronic') {
-    return value <= 200
-      ? 'Avoid prolonged or strenuous outdoor physical exertion.'
-      : 'Avoid outdoor activity.'
-  }
-  if (profile === 'sensitive') {
-    if (value <= 200) return 'Minimise prolonged or strenuous outdoor physical exertion.'
-    return value <= 300 ? 'Minimise outdoor activity.' : 'Avoid outdoor activity.'
-  }
-  if (value <= 200) return 'Reduce prolonged or strenuous outdoor physical exertion.'
-  return value <= 300 ? 'Avoid prolonged or strenuous outdoor physical exertion.' : 'Minimise outdoor activity.'
-}
 
 function localTime(value, options = {}) {
   if (!value) return '—'
@@ -273,7 +241,7 @@ function App() {
           <div className="profile-tabs" aria-label="Choose health profile">{HEALTH_PROFILES.map(profile => <button key={profile.id} className={healthProfile === profile.id ? 'active' : ''} onClick={() => setHealthProfile(profile.id)}>{profile.label}</button>)}</div>
           <p className="decision-copy">{psiGuidance(selectedReading?.psi_24h, healthProfile)}</p>
           <dl><div><dt>24-hour PSI</dt><dd>{selectedReading?.psi_24h ?? '—'}</dd></div><div><dt>1-hour PM2.5</dt><dd>{selectedReading?.pm25_1h ?? '—'} <small>µg/m³</small></dd></div><div><dt>Region</dt><dd className="capitalize">{selected}</dd></div></dl>
-          <p className="immediate-note"><strong>{pmBand(selectedReading?.pm25_1h)} now.</strong> Use 1-hour PM2.5 for immediate decisions and 24-hour PSI for prolonged exposure.</p>
+          <p className="immediate-note"><strong>{pmBand(selectedReading?.pm25_1h)} now.</strong> {pmGuidance(selectedReading?.pm25_1h, healthProfile)}</p>
           <a href="https://www.haze.gov.sg/" target="_blank" rel="noreferrer">Check official advisory ↗</a>
         </aside>
       </section>
