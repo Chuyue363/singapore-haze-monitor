@@ -291,7 +291,7 @@ function App() {
             <p className="eyebrow">VALIDATION</p>
             <h3>{analysis?.status === 'ready' ? (analysis.beats_naive ? 'Model beats persistence' : 'Baseline remains stronger') : analysis?.status === 'loading' ? 'Refreshing validation' : analysis?.status === 'unavailable' ? 'Validation unavailable' : 'Pending sufficient data'}</h3>
             <div className="metric-list"><div><span>Walk-forward MAE</span><strong>{analysis?.validation_mae ?? '—'}</strong></div><div><span>Persistence MAE</span><strong>{analysis?.naive_mae ?? '—'}</strong></div><div><span>R²</span><strong>{analysis?.r_squared ?? '—'}</strong></div><div><span>Validation points</span><strong>{analysis?.validation_samples ?? '—'}</strong></div></div>
-            <p className="fine-print">Each validation prediction uses only prior observations. The forecast is experimental and never replaces NEA forecasts or health guidance. Confidence ranges reflect historical residual variation, not all sources of uncertainty.</p>
+            <p className="fine-print">Each validation prediction uses only prior observations. Horizon-specific ranges use walk-forward errors where at least five examples exist, with a residual fallback for smaller samples. This experiment never replaces NEA forecasts or health guidance.</p>
           </article>
         </div>
       </section>

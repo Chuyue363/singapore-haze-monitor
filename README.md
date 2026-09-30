@@ -99,9 +99,10 @@ The current model predicts 1-hour PM2.5 using the previous hour, trailing 3-hour
 2. uses only the latest uninterrupted hourly segment;
 3. reserves the newest 20% of samples for expanding-window walk-forward validation;
 4. refits using only prior observations at every validation step and reports MAE beside a persistence baseline (the previous value); and
-5. refits on all eligible observations only after evaluation, for the displayed three-hour recursive estimate.
+5. derives each horizon's range from the 90th percentile of its walk-forward absolute errors when at least five are available; and
+6. refits on all eligible observations only after evaluation, for the displayed three-hour recursive estimate.
 
-The interval is an approximate residual-based range. It does not capture weather, wind, fire, satellite, or policy information and must not be interpreted as an NEA forecast. See [methodology notes](docs/methodology.md) for limitations and next experiments.
+Sparse horizons fall back to an approximate residual-based range. Neither method captures weather, wind, fire, satellite, or policy information, and the result must not be interpreted as an NEA forecast. See [methodology notes](docs/methodology.md) for limitations and next experiments.
 
 ## Data sources and interpretation
 

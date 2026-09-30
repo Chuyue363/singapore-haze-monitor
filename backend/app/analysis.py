@@ -40,23 +40,40 @@ def _walk_forward_validation(
     y: np.ndarray,
     values: list[float],
     initial_training_samples: int,
-) -> tuple[float, float, int]:
-    model_predictions: list[float] = []
+    horizon: int,
+) -> tuple[float, float, int, list[list[float]]]:
+    absolute_errors: list[list[float]] = [[] for _ in range(horizon)]
     naive_predictions: list[float] = []
     actual_values: list[float] = []
 
     for test_index in range(initial_training_samples, len(y)):
         beta, *_ = np.linalg.lstsq(x[:test_index], y[:test_index], rcond=None)
-        model_predictions.append(float(np.dot(x[test_index], beta)))
+        projected = values[:test_index + 3]
+        for step_index in range(horizon):
+            target_index = test_index + 3 + step_index
+            if target_index >= len(values):
+                break
+            estimate = max(
+                0.0,
+                float(np.dot(_features(projected, len(projected)), beta)),
+            )
+            absolute_errors[step_index].append(abs(estimate - values[target_index]))
+            projected.append(estimate)
         naive_predictions.append(values[test_index + 2])
         actual_values.append(float(y[test_index]))
 
     actual = np.array(actual_values, dtype=float)
-    model = np.array(model_predictions, dtype=float)
     naive = np.array(naive_predictions, dtype=float)
-    model_mae = float(np.mean(np.abs(model - actual)))
+    model_mae = float(np.mean(absolute_errors[0]))
     naive_mae = float(np.mean(np.abs(naive - actual)))
-    return model_mae, naive_mae, len(actual_values)
+    return model_mae, naive_mae, len(actual_values), absolute_errors
+
+
+def _interval_width(errors: list[float], residual_std: float) -> tuple[float, str]:
+    if len(errors) >= 5:
+        width = float(np.quantile(np.array(errors, dtype=float), 0.9, method="higher"))
+        return width, "walk_forward_p90"
+    return 1.96 * residual_std, "residual_fallback"
 
 
 def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
@@ -76,14 +93,16 @@ def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
     values = [point[1] for point in points]
     x = np.array([_features(values, i) for i in range(3, len(values))], dtype=float)
     y = np.array(values[3:], dtype=float)
+    bounded_horizon = max(1, min(horizon, 12))
 
     split = max(10, int(len(y) * 0.8))
     split = min(split, len(y) - 1)
-    model_mae, naive_mae, validation_samples = _walk_forward_validation(
+    model_mae, naive_mae, validation_samples, errors_by_horizon = _walk_forward_validation(
         x,
         y,
         values,
         split,
+        bounded_horizon,
     )
 
     beta, *_ = np.linalg.lstsq(x, y, rcond=None)
@@ -97,15 +116,21 @@ def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
     projected = values[:]
     forecasts = []
     last_time = timestamps[-1]
-    for step in range(1, max(1, min(horizon, 12)) + 1):
+    for step in range(1, bounded_horizon + 1):
         estimate = max(0.0, float(np.dot(_features(projected, len(projected)), beta)))
         projected.append(estimate)
+        interval_width, interval_basis = _interval_width(
+            errors_by_horizon[step - 1],
+            residual_std,
+        )
         forecasts.append(
             {
                 "timestamp": (last_time + timedelta(hours=step)).isoformat(),
                 "pm25_1h": round(estimate, 1),
-                "lower": round(max(0, estimate - 1.96 * residual_std), 1),
-                "upper": round(estimate + 1.96 * residual_std, 1),
+                "lower": round(max(0, estimate - interval_width), 1),
+                "upper": round(estimate + interval_width, 1),
+                "interval_basis": interval_basis,
+                "interval_samples": len(errors_by_horizon[step - 1]),
             }
         )
 
@@ -120,6 +145,10 @@ def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
         "initial_training_samples": split,
         "validation_samples": validation_samples,
         "validation_method": "Expanding-window walk-forward",
+        "interval_method": (
+            "Horizon-specific 90th percentile of walk-forward absolute error; "
+            "residual fallback below five samples"
+        ),
         "r_squared": round(r_squared, 3),
         "validation_mae": round(model_mae, 2),
         "naive_mae": round(naive_mae, 2),
