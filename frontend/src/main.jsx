@@ -32,13 +32,14 @@ function Skeleton({ className = '' }) {
 }
 
 function ChartLoading() {
-  return <div className="chart-loading" aria-label="Loading chart"><Skeleton/><Skeleton/><Skeleton/></div>
+  return <div className="chart-loading" role="status" aria-label="Loading chart"><Skeleton/><Skeleton/><Skeleton/></div>
 }
 
 function RegionCard({ region, reading, selected, onSelect }) {
   const status = psiBand(reading?.psi_24h)
+  const label = `${region} region: 24-hour PSI ${reading?.psi_24h ?? 'unavailable'}, ${status.label}; 1-hour PM2.5 ${reading?.pm25_1h ?? 'unavailable'} micrograms per cubic metre`
   return (
-    <button className={`region-card ${status.tone} ${selected ? 'selected' : ''}`} onClick={onSelect}>
+    <button type="button" className={`region-card ${status.tone} ${selected ? 'selected' : ''}`} onClick={onSelect} aria-pressed={selected} aria-label={label}>
       <span className="card-top"><span className="region-name">{region}</span><span className="live-dot" /></span>
       <span className="metric-kicker">24-hour PSI</span>
       <span className="psi-number">{reading?.psi_24h ?? '—'}</span>
@@ -51,7 +52,7 @@ function RegionCard({ region, reading, selected, onSelect }) {
 }
 
 function LoadingCards() {
-  return <section className="region-grid">{REGIONS.map(region => (
+  return <section className="region-grid" aria-label="Loading regional air-quality readings">{REGIONS.map(region => (
     <article className="region-card loading" key={region}>
       <Skeleton className="short"/><Skeleton className="number"/><Skeleton/><Skeleton/>
     </article>
@@ -182,11 +183,12 @@ function App() {
 
   return (
     <main>
+      <a className="skip-link" href="#regional-overview">Skip to regional readings</a>
       <nav className="nav-shell">
         <a className="brand" href="#top"><span className="brand-mark">SG</span><span>ClearSky</span></a>
         <div className="nav-actions">
-          <span className={`source-pill ${meta?.stale ? 'stale' : ''}`}><span />{meta?.stale ? 'Stored data' : 'Official data live'}</span>
-          <button className="refresh-button" onClick={() => loadLatest(true)} disabled={refreshing}>
+          <span className={`source-pill ${meta?.stale ? 'stale' : ''}`} aria-live="polite"><span />{meta?.stale ? 'Stored data' : 'Official data live'}</span>
+          <button type="button" className="refresh-button" onClick={() => loadLatest(true)} disabled={refreshing} aria-label={refreshing ? 'Refreshing official readings' : 'Refresh official readings'}>
             <span className={refreshing ? 'spin' : ''}>↻</span>{refreshing ? 'Refreshing' : 'Refresh'}
           </button>
         </div>
@@ -198,21 +200,21 @@ function App() {
           <h1>Know the air<br/>before you step out.</h1>
           <p className="hero-copy">Current regional readings, transparent data quality, and experimental short-term analysis—without hiding uncertainty.</p>
         </div>
-        <aside className={`hero-status ${selectedStatus.tone}`}>
+        <aside className={`hero-status ${selectedStatus.tone}`} aria-live="polite">
           <span className="metric-kicker">Highest current PM2.5</span>
           {loading ? <Skeleton className="number"/> : <><strong>{highest?.pm25_1h ?? '—'}</strong><small>µg/m³ · {highest?.region ?? 'No region'}</small></>}
           <p>{highest ? pmBand(highest.pm25_1h) : 'Waiting for official readings'}</p>
         </aside>
       </header>
 
-      {error && <div className="error-banner" role="alert"><strong>Connection issue</strong><span>{error}</span><button onClick={() => loadLatest(true)}>Try again</button></div>}
+      {error && <div className="error-banner" role="alert"><strong>Connection issue</strong><span>{error}</span><button type="button" onClick={() => loadLatest(true)}>Try again</button></div>}
 
-      <section className="section-heading">
-        <div><p className="eyebrow">RIGHT NOW</p><h2>Regional overview</h2></div>
+      <section className="section-heading" id="regional-overview">
+        <div><p className="eyebrow">RIGHT NOW</p><h2 id="regional-heading">Regional overview</h2></div>
         <p>{meta?.data_age_minutes != null ? `Oldest regional reading: ${Math.round(meta.data_age_minutes)} min` : 'Retrieving latest observations'}</p>
       </section>
       <LocationHelper town={selectedTown} selectedRegion={selected} onSelect={selectTown}/>
-      {loading ? <LoadingCards/> : <section className="region-grid">
+      {loading ? <LoadingCards/> : <section className="region-grid" aria-labelledby="regional-heading">
         {REGIONS.map(region => <RegionCard key={region} region={region} reading={byRegion[region]} selected={selected === region} onSelect={() => selectRegion(region)} />)}
       </section>}
 
@@ -222,20 +224,20 @@ function App() {
             <div><p className="eyebrow">7-DAY SIGNAL</p><h2>{selected} PM2.5 trend</h2></div>
             <div className="chart-actions">
               <a className="export-link" href={`/api/readings/export.csv?region=${selected}&limit=1000`}>Export CSV ↓</a>
-              <div className="region-tabs" role="tablist" aria-label="Select air quality region">{REGIONS.map(region => <button className={selected === region ? 'active' : ''} onClick={() => selectRegion(region)} key={region}>{region}</button>)}</div>
+              <div className="region-tabs" role="group" aria-label="Select air quality region">{REGIONS.map(region => <button type="button" aria-pressed={selected === region} className={selected === region ? 'active' : ''} onClick={() => selectRegion(region)} key={region}>{region}</button>)}</div>
             </div>
           </div>
-          <div className="chart-wrap" aria-busy={historyLoading}>
+          <div className="chart-wrap" role="region" aria-busy={historyLoading} aria-label={`Seven-day PM2.5 history for ${selected} Singapore`}>
             {historyLoading ? <ChartLoading/> : historyError ? <div className="empty-chart"><span>History unavailable</span><p>{historyError}</p></div> : chartData.length > 1 ? <Suspense fallback={<ChartLoading/>}><HistoryChart data={chartData}/></Suspense> : <div className="empty-chart"><span>Collecting history</span><p>Run the backfill command to populate a seven-day trend and unlock regression analysis.</p></div>}
           </div>
         </article>
 
         <aside className={`panel decision-panel ${selectedStatus.tone}`}>
           <p className="eyebrow">24-HOUR EXPOSURE CONTEXT</p><h2>{selectedStatus.label}</h2>
-          <div className="profile-tabs" aria-label="Choose health profile">{HEALTH_PROFILES.map(profile => <button key={profile.id} className={healthProfile === profile.id ? 'active' : ''} onClick={() => setHealthProfile(profile.id)}>{profile.label}</button>)}</div>
+          <div className="profile-tabs" role="group" aria-label="Choose health profile">{HEALTH_PROFILES.map(profile => <button type="button" aria-pressed={healthProfile === profile.id} key={profile.id} className={healthProfile === profile.id ? 'active' : ''} onClick={() => setHealthProfile(profile.id)}>{profile.label}</button>)}</div>
           <p className="decision-copy">{psiGuidance(selectedReading?.psi_24h, healthProfile)}</p>
           <dl><div><dt>24-hour PSI</dt><dd>{selectedReading?.psi_24h ?? '—'}</dd></div><div><dt>1-hour PM2.5</dt><dd>{selectedReading?.pm25_1h ?? '—'} <small>µg/m³</small></dd></div><div><dt>Region</dt><dd className="capitalize">{selected}</dd></div></dl>
-          <p className="immediate-note"><strong>{pmBand(selectedReading?.pm25_1h)} now.</strong> {pmGuidance(selectedReading?.pm25_1h, healthProfile)}</p>
+          <p className="immediate-note" aria-live="polite"><strong>{pmBand(selectedReading?.pm25_1h)} now.</strong> {pmGuidance(selectedReading?.pm25_1h, healthProfile)}</p>
           <a href="https://www.haze.gov.sg/" target="_blank" rel="noreferrer">Check official advisory ↗</a>
         </aside>
       </section>

@@ -7,6 +7,7 @@ body { margin: 0; min-width: 320px; background: radial-gradient(circle at 70% -1
 button, a { font: inherit; }
 button { cursor: pointer; }
 button:focus-visible,a:focus-visible { outline:3px solid rgba(36,107,253,.35); outline-offset:3px; }
+.skip-link { position:fixed; z-index:100; top:12px; left:12px; transform:translateY(-180%); padding:10px 14px; border-radius:9px; background:var(--ink); color:#fff; font-weight:700; text-decoration:none; transition:transform .15s; }.skip-link:focus { transform:translateY(0); }
 main { max-width: 1240px; margin: auto; padding: 0 30px 36px; }
 .nav-shell { height: 78px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(210,216,225,.8); }
 .brand { display:flex; align-items:center; gap:10px; color:var(--ink); text-decoration:none; font-family:Manrope,sans-serif; font-weight:800; }
