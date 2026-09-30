@@ -1,7 +1,8 @@
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { requestJSON } from './api.js'
 import { pmBand, pmGuidance, psiBand, psiGuidance } from './guidance.js'
+import { readingsRevision } from './readings.js'
 import { REGION_TOWNS, regionForTown } from './regions.js'
 import './styles.css'
 
@@ -95,29 +96,64 @@ function App() {
   const [historyLoading, setHistoryLoading] = useState(true)
   const [historyError, setHistoryError] = useState('')
   const [error, setError] = useState('')
+  const latestControllerRef = useRef(null)
+  const readingsRevisionRef = useRef('')
 
   const loadLatest = useCallback(async (force = false) => {
+    if (latestControllerRef.current) {
+      if (!force) return
+      latestControllerRef.current.abort()
+    }
+    const controller = new AbortController()
+    latestControllerRef.current = controller
     if (force) setRefreshing(true)
     try {
       const payload = await requestJSON(
         `/api/readings/latest${force ? '?refresh=true' : ''}`,
-        { timeoutMs: force ? 30000 : 15000 },
+        { timeoutMs: force ? 30000 : 15000, signal: controller.signal },
       )
-      setReadings(payload.data)
+      const revision = readingsRevision(payload.data)
+      if (revision !== readingsRevisionRef.current) {
+        readingsRevisionRef.current = revision
+        setReadings(payload.data)
+      }
       setMeta(payload.meta)
       setError('')
       requestJSON('/api/summary')
         .then(summaryPayload => setPipeline(summaryPayload.data))
         .catch(() => setPipeline(null))
     } catch (err) {
-      setError('Live readings are temporarily unavailable. Please try again shortly.')
+      if (err.name !== 'AbortError') {
+        setError('Live readings are temporarily unavailable. Please try again shortly.')
+      }
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      if (latestControllerRef.current === controller) {
+        latestControllerRef.current = null
+        setLoading(false)
+        setRefreshing(false)
+      }
     }
   }, [])
 
-  useEffect(() => { loadLatest() }, [loadLatest])
+  useEffect(() => {
+    loadLatest()
+    return () => {
+      const controller = latestControllerRef.current
+      latestControllerRef.current = null
+      controller?.abort()
+    }
+  }, [loadLatest])
+  useEffect(() => {
+    const intervalId = setInterval(() => loadLatest(), 5 * 60 * 1000)
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') loadLatest()
+    }
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [loadLatest])
   useEffect(() => {
     if (loading) return undefined
     const controller = new AbortController()
