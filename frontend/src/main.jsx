@@ -1,5 +1,6 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import { requestJSON } from './api.js'
 import { pmBand, pmGuidance, psiBand, psiGuidance } from './guidance.js'
 import { REGION_TOWNS, regionForTown } from './regions.js'
 import './styles.css'
@@ -24,16 +25,6 @@ function localTime(value, options = {}) {
 
 function formatCount(value) {
   return typeof value === 'number' ? value.toLocaleString('en-SG') : '—'
-}
-
-/**
- * @param {string} url
- * @param {RequestInit} [options]
- */
-async function requestJSON(url, options = {}) {
-  const response = await fetch(url, options)
-  if (!response.ok) throw new Error(`Request failed (${response.status})`)
-  return response.json()
 }
 
 function Skeleton({ className = '' }) {
@@ -102,7 +93,10 @@ function App() {
   const loadLatest = useCallback(async (force = false) => {
     if (force) setRefreshing(true)
     try {
-      const payload = await requestJSON(`/api/readings/latest${force ? '?refresh=true' : ''}`)
+      const payload = await requestJSON(
+        `/api/readings/latest${force ? '?refresh=true' : ''}`,
+        { timeoutMs: force ? 30000 : 15000 },
+      )
       setReadings(payload.data)
       setMeta(payload.meta)
       setError('')
