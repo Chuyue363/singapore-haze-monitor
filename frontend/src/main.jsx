@@ -1,5 +1,6 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import { REGION_TOWNS, regionForTown } from './regions.js'
 import './styles.css'
 
 const HistoryChart = lazy(() => import('./Charts.jsx').then(module => ({ default: module.HistoryChart })))
@@ -90,12 +91,30 @@ function LoadingCards() {
   ))}</section>
 }
 
+/**
+ * @param {{ town: string, selectedRegion: string, onSelect: (town: string) => void }} props
+ */
+function LocationHelper({ town, selectedRegion, onSelect }) {
+  return <div className="location-helper">
+    <div>
+      <label htmlFor="town-region">Find your reporting region</label>
+      <span>No GPS or location data is collected.</span>
+    </div>
+    <select id="town-region" value={town} onChange={event => onSelect(event.target.value)}>
+      <option value="">Choose your nearest town</option>
+      {REGION_TOWNS.map(item => <option key={item.town} value={item.town}>{item.town} — {item.region}</option>)}
+    </select>
+    <p aria-live="polite">{town ? `${town} uses the ${selectedRegion} reading.` : 'Select a town to focus the relevant NEA region.'}</p>
+  </div>
+}
+
 function App() {
   const [readings, setReadings] = useState([])
   const [history, setHistory] = useState([])
   const [analysis, setAnalysis] = useState(null)
   const [meta, setMeta] = useState(null)
   const [selected, setSelected] = useState('central')
+  const [selectedTown, setSelectedTown] = useState('')
   const [healthProfile, setHealthProfile] = useState('healthy')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -146,6 +165,17 @@ function App() {
   const highest = useMemo(() => readings.reduce((best, row) =>
     (row.pm25_1h ?? -1) > (best?.pm25_1h ?? -1) ? row : best, null), [readings])
 
+  const selectRegion = useCallback((region) => {
+    setSelected(region)
+    setSelectedTown('')
+  }, [])
+
+  const selectTown = useCallback((town) => {
+    setSelectedTown(town)
+    const region = regionForTown(town)
+    if (region) setSelected(region)
+  }, [])
+
   return (
     <main>
       <nav className="nav-shell">
@@ -177,8 +207,9 @@ function App() {
         <div><p className="eyebrow">RIGHT NOW</p><h2>Regional overview</h2></div>
         <p>{meta?.data_age_minutes != null ? `Observed ${Math.round(meta.data_age_minutes)} min ago` : 'Retrieving latest observation'}</p>
       </section>
+      <LocationHelper town={selectedTown} selectedRegion={selected} onSelect={selectTown}/>
       {loading ? <LoadingCards/> : <section className="region-grid">
-        {REGIONS.map(region => <RegionCard key={region} region={region} reading={byRegion[region]} selected={selected === region} onSelect={() => setSelected(region)} />)}
+        {REGIONS.map(region => <RegionCard key={region} region={region} reading={byRegion[region]} selected={selected === region} onSelect={() => selectRegion(region)} />)}
       </section>}
 
       <section className="analysis-grid">
@@ -187,7 +218,7 @@ function App() {
             <div><p className="eyebrow">7-DAY SIGNAL</p><h2>{selected} PM2.5 trend</h2></div>
             <div className="chart-actions">
               <a className="export-link" href={`/api/readings/export.csv?region=${selected}&limit=1000`}>Export CSV ↓</a>
-              <div className="region-tabs" role="tablist" aria-label="Select air quality region">{REGIONS.map(region => <button className={selected === region ? 'active' : ''} onClick={() => setSelected(region)} key={region}>{region}</button>)}</div>
+              <div className="region-tabs" role="tablist" aria-label="Select air quality region">{REGIONS.map(region => <button className={selected === region ? 'active' : ''} onClick={() => selectRegion(region)} key={region}>{region}</button>)}</div>
             </div>
           </div>
           <div className="chart-wrap">

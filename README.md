@@ -17,6 +17,7 @@ The product answers three different questions without conflating them:
 - Schema validation, deduplication, range checks, and review flags for unusual spikes
 - Retry and backoff for upstream rate limits; last-known-valid data remains available during outages
 - Seven-day signal chart, 3-hour moving average, and auditable CSV export
+- Privacy-preserving town selector mapped to NEA's five reporting regions
 - Health-profile guidance that keeps immediate PM2.5 context separate from 24-hour PSI exposure guidance
 - Gap-safe autoregressive OLS model with chronological holdout evaluation against persistence
 - Responsive loading, error, empty, and insufficient-data states
@@ -72,6 +73,7 @@ Open `http://localhost:5173`. Vite proxies `/api` to port 5050; override that wi
 
 ```bash
 backend/.venv/bin/python -m pytest -q backend/tests
+npm --prefix frontend test
 npm --prefix frontend run build
 ```
 
@@ -124,5 +126,5 @@ A production deployment still needs persistent storage and a scheduled call to `
 - Walk-forward evaluation across multiple haze and non-haze periods
 - Weather, wind, rainfall, and regional hotspot features with source-aware timestamps
 - Scheduled production ingestion and freshness alerting
-- Accessible location-to-region helper
+- Optional text search and aliases for the location-to-region helper
 - User-controlled alerts only after false-positive and notification design is validated
