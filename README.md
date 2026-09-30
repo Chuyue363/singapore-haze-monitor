@@ -17,6 +17,7 @@ The product answers three different questions without conflating them:
 - Schema validation, deduplication, range checks, and timestamp-scoped cross-region review flags
 - Retry and backoff for upstream rate limits; last-known-valid data remains available during outages
 - Seven-day signal chart, 3-hour moving average, and auditable CSV export
+- Visible pipeline audit with validated-row, observation, review-flag, and ingestion counts
 - Privacy-preserving town selector mapped to NEA's five reporting regions
 - Health-profile guidance that keeps immediate PM2.5 context separate from 24-hour PSI exposure guidance
 - Gap-safe autoregressive OLS model with expanding-window walk-forward evaluation against persistence

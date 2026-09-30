@@ -118,6 +118,30 @@ def test_unknown_region_is_rejected():
     assert client.get("/api/readings/history?region=moon").status_code == 400
 
 
+def test_summary_exposes_data_quality_counts():
+    timestamp = datetime.now(timezone.utc).isoformat()
+    insert_readings([
+        {
+            "region": "central",
+            "reading_timestamp": timestamp,
+            "updated_timestamp": timestamp,
+            "psi_24h": 80,
+            "pm25_1h": 42,
+            "pm25_24h": 30,
+            "source": "test",
+            "quality_status": "review",
+            "quality_notes": "test review flag",
+        }
+    ])
+
+    response = create_app().test_client().get("/api/summary")
+
+    assert response.status_code == 200
+    assert response.json["data"]["rows"] == 1
+    assert response.json["data"]["timestamps"] == 1
+    assert response.json["data"]["review_rows"] == 1
+
+
 def test_csv_export_has_auditable_fields():
     insert_readings([
         {

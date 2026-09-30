@@ -54,6 +54,10 @@ function localTime(value, options = {}) {
   }).format(new Date(value))
 }
 
+function formatCount(value) {
+  return typeof value === 'number' ? value.toLocaleString('en-SG') : '—'
+}
+
 /**
  * @param {string} url
  * @param {RequestInit} [options]
@@ -117,6 +121,7 @@ function App() {
   const [history, setHistory] = useState([])
   const [analysis, setAnalysis] = useState({ status: 'loading' })
   const [meta, setMeta] = useState(null)
+  const [pipeline, setPipeline] = useState(null)
   const [selected, setSelected] = useState('central')
   const [selectedTown, setSelectedTown] = useState('')
   const [healthProfile, setHealthProfile] = useState('healthy')
@@ -133,6 +138,9 @@ function App() {
       setReadings(payload.data)
       setMeta(payload.meta)
       setError('')
+      requestJSON('/api/summary')
+        .then(summaryPayload => setPipeline(summaryPayload.data))
+        .catch(() => setPipeline(null))
     } catch (err) {
       setError('Live readings are temporarily unavailable. Please try again shortly.')
     } finally {
@@ -285,6 +293,21 @@ function App() {
             <div className="metric-list"><div><span>Walk-forward MAE</span><strong>{analysis?.validation_mae ?? '—'}</strong></div><div><span>Persistence MAE</span><strong>{analysis?.naive_mae ?? '—'}</strong></div><div><span>R²</span><strong>{analysis?.r_squared ?? '—'}</strong></div><div><span>Validation points</span><strong>{analysis?.validation_samples ?? '—'}</strong></div></div>
             <p className="fine-print">Each validation prediction uses only prior observations. The forecast is experimental and never replaces NEA forecasts or health guidance. Confidence ranges reflect historical residual variation, not all sources of uncertainty.</p>
           </article>
+        </div>
+      </section>
+
+      <section className="panel pipeline-panel" aria-label="Data pipeline audit">
+        <div className="pipeline-copy">
+          <p className="eyebrow">DATA PIPELINE AUDIT</p>
+          <h2>Quality checks you can inspect</h2>
+          <p>Every provider row passes schema, range, deduplication, and same-timestamp regional anomaly checks. Possible spikes remain visible and are marked for review.</p>
+          <small>{pipeline?.first_timestamp ? `${localTime(pipeline.first_timestamp, { day: true })} to ${localTime(pipeline.latest_timestamp, { day: true })}` : 'Coverage builds as official observations are ingested.'}</small>
+        </div>
+        <div className="pipeline-metrics">
+          <div><strong>{formatCount(pipeline?.rows)}</strong><span>validated regional rows</span></div>
+          <div><strong>{formatCount(pipeline?.timestamps)}</strong><span>observation timestamps</span></div>
+          <div><strong>{formatCount(pipeline?.review_rows)}</strong><span>retained review flags</span></div>
+          <div><strong>{formatCount(pipeline?.last_ingestion?.inserted)}</strong><span>new rows last ingestion</span></div>
         </div>
       </section>
 
