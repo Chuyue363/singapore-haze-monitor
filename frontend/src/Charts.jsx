@@ -43,8 +43,9 @@ export function ForecastChart({ data }) {
       <CartesianGrid stroke="#edf0f4" vertical={false}/>
       <XAxis dataKey="timestamp" tickFormatter={value => localTime(value)} axisLine={false} tickLine={false}/>
       <YAxis domain={['auto', 'auto']} axisLine={false} tickLine={false}/>
-      <Tooltip labelFormatter={value => localTime(value, true)} formatter={value => [`${value} µg/m³`, 'Estimate']}/>
-      <Line type="monotone" dataKey="pm25_1h" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 4 }}/>
+      <Tooltip labelFormatter={value => localTime(value, true)} formatter={(value, name) => [`${value} µg/m³`, name === 'Persistence baseline' ? name : 'OLS estimate']}/>
+      <Line type="monotone" dataKey="persistence_pm25_1h" name="Persistence baseline" stroke="#9aa4b2" strokeWidth={2} strokeDasharray="5 5" dot={false}/>
+      <Line type="monotone" dataKey="pm25_1h" name="OLS estimate" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 4 }}/>
     </LineChart>
   </ResponsiveContainer>
 }

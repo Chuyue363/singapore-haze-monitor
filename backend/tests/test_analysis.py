@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from app import analysis
-from app.analysis import regression_analysis
+from app.analysis import _relative_skill_percent, regression_analysis
 
 
 def test_regression_reports_insufficient_data():
@@ -25,9 +25,17 @@ def test_regression_builds_forecast():
     assert result["validation_method"] == "Expanding-window walk-forward"
     assert result["initial_training_samples"] == 37
     assert result["validation_samples"] == 10
+    assert result["skill_percent"] > 0
     assert [item["interval_samples"] for item in result["forecast"]] == [10, 9, 8]
+    assert len({item["persistence_pm25_1h"] for item in result["forecast"]}) == 1
     assert all(item["interval_basis"] == "walk_forward_p90" for item in result["forecast"])
     assert all(item["lower"] <= item["pm25_1h"] <= item["upper"] for item in result["forecast"])
+
+
+def test_relative_skill_uses_unrounded_errors():
+    assert _relative_skill_percent(1.155, 1.8) == 35.8
+    assert _relative_skill_percent(2, 1) == -100
+    assert _relative_skill_percent(0, 0) is None
 
 
 def test_walk_forward_validation_only_trains_on_prior_observations(monkeypatch):
@@ -70,6 +78,22 @@ def test_regression_uses_residual_interval_when_validation_is_sparse():
     assert result["validation_samples"] == 4
     assert [item["interval_samples"] for item in result["forecast"]] == [4, 3, 2]
     assert all(item["interval_basis"] == "residual_fallback" for item in result["forecast"])
+
+
+def test_regression_omits_relative_skill_when_persistence_is_perfect():
+    start = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    rows = [
+        {
+            "reading_timestamp": (start + timedelta(hours=index)).isoformat(),
+            "pm25_1h": 25,
+        }
+        for index in range(30)
+    ]
+
+    result = regression_analysis(rows)
+
+    assert result["naive_mae"] == 0
+    assert result["skill_percent"] is None
 
 
 def test_regression_does_not_bridge_hourly_gaps():

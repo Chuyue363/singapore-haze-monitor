@@ -27,6 +27,11 @@ function formatCount(value) {
   return typeof value === 'number' ? value.toLocaleString('en-SG') : '—'
 }
 
+function formatSkill(value) {
+  if (typeof value !== 'number') return '—'
+  return `${value > 0 ? '+' : ''}${value}%`
+}
+
 function Skeleton({ className = '' }) {
   return <span className={`skeleton ${className}`} aria-hidden="true" />
 }
@@ -254,8 +259,8 @@ function App() {
           <article className="panel metrics-panel">
             <p className="eyebrow">VALIDATION</p>
             <h3>{analysis?.status === 'ready' ? (analysis.beats_naive ? 'Model beats persistence' : 'Baseline remains stronger') : analysis?.status === 'loading' ? 'Refreshing validation' : analysis?.status === 'unavailable' ? 'Validation unavailable' : 'Pending sufficient data'}</h3>
-            <div className="metric-list"><div><span>Walk-forward MAE</span><strong>{analysis?.validation_mae ?? '—'}</strong></div><div><span>Persistence MAE</span><strong>{analysis?.naive_mae ?? '—'}</strong></div><div><span>R²</span><strong>{analysis?.r_squared ?? '—'}</strong></div><div><span>Validation points</span><strong>{analysis?.validation_samples ?? '—'}</strong></div></div>
-            <p className="fine-print">Each validation prediction uses only prior observations. Horizon-specific ranges use walk-forward errors where at least five examples exist, with a residual fallback for smaller samples. This experiment never replaces NEA forecasts or health guidance.</p>
+            <div className="metric-list"><div><span>Walk-forward MAE</span><strong>{analysis?.validation_mae ?? '—'}</strong></div><div><span>Persistence MAE</span><strong>{analysis?.naive_mae ?? '—'}</strong></div><div><span>Skill vs persistence</span><strong>{formatSkill(analysis?.skill_percent)}</strong></div><div><span>In-sample R²</span><strong>{analysis?.r_squared ?? '—'}</strong></div><div><span>Validation points</span><strong>{analysis?.validation_samples ?? '—'}</strong></div><div><span>Observations</span><strong>{analysis?.observations ?? analysis?.available ?? '—'}</strong></div></div>
+            <p className="fine-print">Positive skill means lower error than persistence; no percentage is shown when persistence is perfect. Each validation prediction uses only prior observations. Horizon ranges use walk-forward errors with a residual fallback. This experiment never replaces NEA guidance.</p>
           </article>
         </div>
       </section>

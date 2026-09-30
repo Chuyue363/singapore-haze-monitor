@@ -76,6 +76,12 @@ def _interval_width(errors: list[float], residual_std: float) -> tuple[float, st
     return 1.96 * residual_std, "residual_fallback"
 
 
+def _relative_skill_percent(model_mae: float, naive_mae: float) -> float | None:
+    if naive_mae == 0:
+        return None
+    return round((1 - model_mae / naive_mae) * 100, 1)
+
+
 def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
     all_points = _series(rows)
     points, gap_count = _latest_contiguous_segment(all_points)
@@ -112,6 +118,7 @@ def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
     ss_tot = float(np.sum((y - np.mean(y)) ** 2))
     r_squared = 1 - ss_res / ss_tot if ss_tot else 0.0
     residual_std = float(np.std(residual))
+    skill_percent = _relative_skill_percent(model_mae, naive_mae)
 
     projected = values[:]
     forecasts = []
@@ -127,6 +134,7 @@ def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
             {
                 "timestamp": (last_time + timedelta(hours=step)).isoformat(),
                 "pm25_1h": round(estimate, 1),
+                "persistence_pm25_1h": round(values[-1], 1),
                 "lower": round(max(0, estimate - interval_width), 1),
                 "upper": round(estimate + interval_width, 1),
                 "interval_basis": interval_basis,
@@ -152,6 +160,7 @@ def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
         "r_squared": round(r_squared, 3),
         "validation_mae": round(model_mae, 2),
         "naive_mae": round(naive_mae, 2),
+        "skill_percent": skill_percent,
         "beats_naive": model_mae < naive_mae,
         "forecast": forecasts,
         "warning": "Experimental statistical estimate, not an official NEA forecast or health advisory.",

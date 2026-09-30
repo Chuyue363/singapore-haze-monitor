@@ -98,7 +98,7 @@ The current model predicts 1-hour PM2.5 using the previous hour, trailing 3-hour
 1. deduplicates observations by timestamp;
 2. uses only the latest uninterrupted hourly segment;
 3. reserves the newest 20% of samples for expanding-window walk-forward validation;
-4. refits using only prior observations at every validation step and reports MAE beside a persistence baseline (the previous value); and
+4. refits using only prior observations at every validation step and reports MAE plus relative skill beside a persistence baseline (the previous value); and
 5. derives each horizon's range from the 90th percentile of its walk-forward absolute errors when at least five are available; and
 6. refits on all eligible observations only after evaluation, for the displayed three-hour recursive estimate.
 
