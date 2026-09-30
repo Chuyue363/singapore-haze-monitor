@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -20,6 +21,8 @@ from .db import (
     record_ingestion,
 )
 from .nea_client import fetch_latest
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _age_minutes(timestamp: str | None) -> float | None:
@@ -55,8 +58,24 @@ def _refresh_if_stale(force: bool = False) -> tuple[list[dict], dict]:
             record_ingestion(report, inserted)
             stored = latest_readings()
             refresh.update({"succeeded": True, "inserted": inserted, "message": "Official readings refreshed."})
+            LOGGER.info(
+                "nea_refresh_succeeded inserted=%d accepted=%d rejected=%d review_flagged=%d",
+                inserted,
+                report["accepted"],
+                report["rejected"],
+                report["review_flagged"],
+            )
         except Exception as exc:  # keep serving the last known valid reading
-            refresh["message"] = f"Live refresh unavailable; showing stored data. {type(exc).__name__}"
+            error_type = type(exc).__name__
+            refresh["message"] = f"Live refresh unavailable; showing stored data. {error_type}"
+            LOGGER.warning("nea_refresh_failed error_type=%s", error_type)
+            try:
+                record_ingestion({}, 0, status="failed", message=error_type)
+            except Exception as audit_exc:
+                LOGGER.error(
+                    "nea_refresh_audit_failed error_type=%s",
+                    type(audit_exc).__name__,
+                )
     return stored, refresh
 
 

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from app import api
 from app.api import create_app
 from app.cleaning import REGIONS, clean_readings
-from app.db import insert_readings, latest_readings
+from app.db import database_summary, insert_readings, latest_readings
 
 
 def test_health():
@@ -133,6 +133,36 @@ def test_cache_policy_distinguishes_safe_reads_and_forced_refreshes(monkeypatch)
     assert normal.headers["Cache-Control"] == "public, max-age=60, stale-if-error=300"
     assert forced.headers["Cache-Control"] == "no-store"
     assert index.headers["Cache-Control"] == "no-cache"
+
+
+def test_failed_refresh_serves_stored_data_and_records_audit(monkeypatch, caplog):
+    timestamp = datetime.now(timezone.utc).isoformat()
+    insert_readings([
+        {
+            "region": region,
+            "reading_timestamp": timestamp,
+            "updated_timestamp": timestamp,
+            "psi_24h": 80,
+            "pm25_1h": 42,
+            "pm25_24h": 30,
+            "source": "test",
+        }
+        for region in REGIONS
+    ])
+
+    def fail_refresh() -> list[dict]:
+        raise RuntimeError("simulated upstream failure")
+
+    monkeypatch.setattr(api, "fetch_latest", fail_refresh)
+    with caplog.at_level("WARNING"):
+        response = create_app().test_client().get("/api/readings/latest?refresh=true")
+
+    assert response.status_code == 200
+    assert len(response.json["data"]) == 5
+    assert response.json["meta"]["refresh"]["succeeded"] is False
+    assert database_summary()["last_ingestion"]["status"] == "failed"
+    assert "nea_refresh_failed error_type=RuntimeError" in caplog.text
+    assert "simulated upstream failure" not in caplog.text
 
 
 def test_summary_exposes_data_quality_counts():

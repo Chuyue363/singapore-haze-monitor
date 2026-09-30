@@ -271,7 +271,7 @@ function App() {
           <div><strong>{formatCount(pipeline?.rows)}</strong><span>validated regional rows</span></div>
           <div><strong>{formatCount(pipeline?.timestamps)}</strong><span>observation timestamps</span></div>
           <div><strong>{formatCount(pipeline?.review_rows)}</strong><span>retained review flags</span></div>
-          <div><strong>{formatCount(pipeline?.last_ingestion?.inserted)}</strong><span>new rows last ingestion</span></div>
+          <div><strong>{formatCount(pipeline?.last_ingestion?.inserted)}</strong><span>{pipeline?.last_ingestion ? `${pipeline.last_ingestion.status} · new rows last ingestion` : 'new rows last ingestion'}</span></div>
         </div>
       </section>
 
