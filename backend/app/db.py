@@ -114,10 +114,19 @@ def latest_readings() -> list[dict]:
     init_db()
     with connect() as connection:
         rows = connection.execute(
-            """SELECT region, reading_timestamp, updated_timestamp, psi_24h, pm25_1h,
+            """WITH ranked AS (
+                   SELECT region, reading_timestamp, updated_timestamp, psi_24h, pm25_1h,
+                          pm25_24h, source, quality_status, quality_notes,
+                          ROW_NUMBER() OVER (
+                              PARTITION BY region
+                              ORDER BY reading_timestamp DESC, updated_timestamp DESC, id DESC
+                          ) AS recency_rank
+                   FROM air_quality_readings
+               )
+               SELECT region, reading_timestamp, updated_timestamp, psi_24h, pm25_1h,
                       pm25_24h, source, quality_status, quality_notes
-               FROM air_quality_readings
-               WHERE reading_timestamp = (SELECT MAX(reading_timestamp) FROM air_quality_readings)
+               FROM ranked
+               WHERE recency_rank = 1
                ORDER BY CASE region WHEN 'north' THEN 1 WHEN 'south' THEN 2 WHEN 'east' THEN 3
                                     WHEN 'west' THEN 4 ELSE 5 END"""
         ).fetchall()

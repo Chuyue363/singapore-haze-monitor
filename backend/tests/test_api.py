@@ -1,37 +1,68 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.api import create_app
-from app.cleaning import clean_readings
-from app.db import insert_readings
+from app.cleaning import REGIONS, clean_readings
+from app.db import insert_readings, latest_readings
 
 
 def test_health():
     client = create_app().test_client()
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json["status"] in {"ok", "degraded"}
+    assert response.json["status"] == "degraded"
+    assert response.json["missing_regions"] == list(REGIONS)
     assert "database" in response.json
 
 
 def test_latest_and_history():
-    insert_readings(
-        [
-            {
-                "region": "central",
-                "reading_timestamp": datetime.now(timezone.utc).isoformat(),
-                "updated_timestamp": datetime.now(timezone.utc).isoformat(),
-                "psi_24h": 129,
-                "pm25_1h": 159,
-                "pm25_24h": 82,
-                "source": "test",
-            }
-        ]
-    )
+    timestamp = datetime.now(timezone.utc).isoformat()
+    insert_readings([
+        {
+            "region": region,
+            "reading_timestamp": timestamp,
+            "updated_timestamp": timestamp,
+            "psi_24h": 129,
+            "pm25_1h": 159,
+            "pm25_24h": 82,
+            "source": "test",
+        }
+        for region in REGIONS
+    ])
     client = create_app().test_client()
     latest = client.get("/api/readings/latest")
     assert latest.status_code == 200
-    assert {row["region"] for row in latest.json["data"]} == {"central"}
+    assert {row["region"] for row in latest.json["data"]} == set(REGIONS)
+    assert latest.json["meta"]["regions_reporting"] == 5
+    assert latest.json["meta"]["missing_regions"] == []
     assert len(client.get("/api/readings/history?region=central").json["data"]) >= 1
+
+
+def test_latest_readings_keeps_each_region_most_recent_observation():
+    newest = datetime.now(timezone.utc)
+    rows = [
+        {
+            "region": region,
+            "reading_timestamp": (newest - timedelta(minutes=index)).isoformat(),
+            "updated_timestamp": newest.isoformat(),
+            "psi_24h": 50 + index,
+            "pm25_1h": 20 + index,
+            "pm25_24h": 15 + index,
+            "source": "test",
+        }
+        for index, region in enumerate(REGIONS)
+    ]
+    rows.append({
+        **rows[-1],
+        "reading_timestamp": (newest - timedelta(hours=2)).isoformat(),
+        "pm25_1h": 999,
+    })
+    insert_readings(rows)
+
+    rows = latest_readings()
+
+    assert [row["region"] for row in rows] == list(REGIONS)
+    assert len(rows) == 5
+    assert rows[-1]["pm25_1h"] == 24
 
 
 def test_cleaning_rejects_bad_region_and_deduplicates():

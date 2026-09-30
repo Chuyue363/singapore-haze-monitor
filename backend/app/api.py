@@ -29,10 +29,23 @@ def _age_minutes(timestamp: str | None) -> float | None:
     return round((datetime.now(timezone.utc) - observed).total_seconds() / 60, 1)
 
 
+def _freshness(rows: list[dict]) -> tuple[float | None, list[str]]:
+    ages = [_age_minutes(row.get("reading_timestamp")) for row in rows]
+    available_ages = [age for age in ages if age is not None]
+    regions_present = {row.get("region") for row in rows}
+    missing_regions = [region for region in REGIONS if region not in regions_present]
+    return max(available_ages, default=None), missing_regions
+
+
 def _refresh_if_stale(force: bool = False) -> tuple[list[dict], dict]:
     stored = latest_readings()
-    age = _age_minutes(stored[0]["reading_timestamp"]) if stored else None
-    should_refresh = force or not stored or (age is not None and age > STALE_AFTER_MINUTES)
+    age, missing_regions = _freshness(stored)
+    should_refresh = (
+        force
+        or bool(missing_regions)
+        or age is None
+        or age > STALE_AFTER_MINUTES
+    )
     refresh = {"attempted": False, "succeeded": False, "message": "Using stored readings."}
     if should_refresh:
         refresh["attempted"] = True
@@ -62,10 +75,12 @@ def create_app() -> Flask:
     @app.get("/api/health")
     def health():
         summary = database_summary()
-        age = _age_minutes(summary.get("latest_timestamp"))
+        age, missing_regions = _freshness(latest_readings())
+        healthy = age is not None and age <= STALE_AFTER_MINUTES * 2 and not missing_regions
         return jsonify({
-            "status": "ok" if age is None or age <= STALE_AFTER_MINUTES * 2 else "degraded",
+            "status": "ok" if healthy else "degraded",
             "data_age_minutes": age,
+            "missing_regions": missing_regions,
             "database": summary,
         })
 
@@ -83,12 +98,14 @@ def create_app() -> Flask:
     @app.get("/api/readings/latest")
     def latest():
         rows, refresh = _refresh_if_stale(force=request.args.get("refresh") == "true")
-        age = _age_minutes(rows[0]["reading_timestamp"]) if rows else None
+        age, missing_regions = _freshness(rows)
         return jsonify({
             "data": rows,
             "meta": {
                 "data_age_minutes": age,
-                "stale": age is None or age > STALE_AFTER_MINUTES,
+                "stale": age is None or age > STALE_AFTER_MINUTES or bool(missing_regions),
+                "regions_reporting": len(REGIONS) - len(missing_regions),
+                "missing_regions": missing_regions,
                 "refresh": refresh,
                 "source": "NEA via data.gov.sg",
             },

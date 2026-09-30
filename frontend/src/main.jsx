@@ -205,7 +205,7 @@ function App() {
 
       <section className="section-heading">
         <div><p className="eyebrow">RIGHT NOW</p><h2>Regional overview</h2></div>
-        <p>{meta?.data_age_minutes != null ? `Observed ${Math.round(meta.data_age_minutes)} min ago` : 'Retrieving latest observation'}</p>
+        <p>{meta?.data_age_minutes != null ? `Oldest regional reading: ${Math.round(meta.data_age_minutes)} min` : 'Retrieving latest observations'}</p>
       </section>
       <LocationHelper town={selectedTown} selectedRegion={selected} onSelect={selectTown}/>
       {loading ? <LoadingCards/> : <section className="region-grid">
@@ -255,7 +255,7 @@ function App() {
       </section>
 
       <section className="trust-strip">
-        <div><strong>Official source</strong><span>NEA via data.gov.sg</span></div><div><strong>Visible freshness</strong><span>{meta?.data_age_minutes != null ? `${Math.round(meta.data_age_minutes)} minutes old` : 'Checking'}</span></div><div><strong>Quality policy</strong><span>Spikes are flagged, never silently removed</span></div><div><strong>Last observation</strong><span>{localTime(readings[0]?.reading_timestamp, {day:true})}</span></div>
+        <div><strong>Official source</strong><span>NEA via data.gov.sg</span></div><div><strong>Regional coverage</strong><span>{meta ? `${meta.regions_reporting}/5 regions · ${meta.data_age_minutes == null ? 'no observations' : `oldest ${Math.round(meta.data_age_minutes)} min`}` : 'Checking'}</span></div><div><strong>Quality policy</strong><span>Spikes are flagged, never silently removed</span></div><div><strong>Selected observation</strong><span>{localTime(selectedReading?.reading_timestamp, {day:true})}</span></div>
       </section>
 
       <footer><div className="brand"><span className="brand-mark">SG</span><span>ClearSky</span></div><p>Educational portfolio project. Always refer to NEA and MOH for official advisories.</p><a href="https://github.com/Chuyue363/singapore-haze-monitor" target="_blank" rel="noreferrer">View source ↗</a></footer>
