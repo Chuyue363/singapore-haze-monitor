@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+from app import api
 from app.api import create_app
 from app.cleaning import REGIONS, clean_readings
 from app.db import insert_readings, latest_readings
@@ -12,6 +13,7 @@ def test_health():
     assert response.json["status"] == "degraded"
     assert response.json["missing_regions"] == list(REGIONS)
     assert "database" in response.json
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 def test_latest_and_history():
@@ -115,7 +117,22 @@ def test_cleaning_compares_regional_spikes_at_the_same_timestamp():
 
 def test_unknown_region_is_rejected():
     client = create_app().test_client()
-    assert client.get("/api/readings/history?region=moon").status_code == 400
+    response = client.get("/api/readings/history?region=moon")
+    assert response.status_code == 400
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_cache_policy_distinguishes_safe_reads_and_forced_refreshes(monkeypatch):
+    monkeypatch.setattr(api, "fetch_latest", lambda: [])
+    client = create_app().test_client()
+
+    normal = client.get("/api/readings/history?region=central")
+    forced = client.get("/api/readings/latest?refresh=true")
+    index = client.get("/")
+
+    assert normal.headers["Cache-Control"] == "public, max-age=60, stale-if-error=300"
+    assert forced.headers["Cache-Control"] == "no-store"
+    assert index.headers["Cache-Control"] == "no-cache"
 
 
 def test_summary_exposes_data_quality_counts():

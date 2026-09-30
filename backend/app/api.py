@@ -67,9 +67,20 @@ def create_app() -> Flask:
     init_db()
 
     @app.after_request
-    def cache_headers(response):
-        if request.method == "GET":
-            response.headers["Cache-Control"] = "public, max-age=60"
+    def cache_headers(response: Response) -> Response:
+        if request.method != "GET":
+            return response
+
+        path = request.path
+        forced_refresh = path == "/api/readings/latest" and request.args.get("refresh") == "true"
+        if response.status_code >= 400 or path == "/api/health" or forced_refresh:
+            response.headers["Cache-Control"] = "no-store"
+        elif path.startswith("/assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        elif path == "/":
+            response.headers["Cache-Control"] = "no-cache"
+        else:
+            response.headers["Cache-Control"] = "public, max-age=60, stale-if-error=300"
         return response
 
     @app.get("/api/health")

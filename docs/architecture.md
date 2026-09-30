@@ -10,4 +10,6 @@ The application uses a small number of components deliberately:
 
 The database stores both the provider's reading timestamp and update timestamp. The latest query ranks observations independently within each region so a slightly delayed region is not dropped. Overall freshness uses the oldest of those five regional readings and reports missing regions explicitly.
 
+Cache policy follows response semantics: forced refreshes, health checks, and errors are never stored; ordinary read-only API responses use a short stale-if-error window; and fingerprinted frontend assets can be cached immutably.
+
 The next production improvements are a separate scheduled worker, structured logs, and external freshness alerting. A queue, cache, or microservice split is not justified until traffic or ingestion volume requires one.
