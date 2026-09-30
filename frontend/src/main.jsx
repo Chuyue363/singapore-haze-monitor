@@ -54,8 +54,12 @@ function localTime(value, options = {}) {
   }).format(new Date(value))
 }
 
-async function requestJSON(url) {
-  const response = await fetch(url)
+/**
+ * @param {string} url
+ * @param {RequestInit} [options]
+ */
+async function requestJSON(url, options = {}) {
+  const response = await fetch(url, options)
   if (!response.ok) throw new Error(`Request failed (${response.status})`)
   return response.json()
 }
@@ -111,13 +115,15 @@ function LocationHelper({ town, selectedRegion, onSelect }) {
 function App() {
   const [readings, setReadings] = useState([])
   const [history, setHistory] = useState([])
-  const [analysis, setAnalysis] = useState(null)
+  const [analysis, setAnalysis] = useState({ status: 'loading' })
   const [meta, setMeta] = useState(null)
   const [selected, setSelected] = useState('central')
   const [selectedTown, setSelectedTown] = useState('')
   const [healthProfile, setHealthProfile] = useState('healthy')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(true)
+  const [historyError, setHistoryError] = useState('')
   const [error, setError] = useState('')
 
   const loadLatest = useCallback(async (force = false) => {
@@ -137,18 +143,46 @@ function App() {
 
   useEffect(() => { loadLatest() }, [loadLatest])
   useEffect(() => {
+    if (loading) return undefined
+    const controller = new AbortController()
     let active = true
-    Promise.all([
-      requestJSON(`/api/readings/history?region=${selected}&limit=168`),
-      requestJSON(`/api/analysis/regression?region=${selected}&horizon=3`),
-    ]).then(([historyPayload, analysisPayload]) => {
-      if (active) {
-        setHistory(historyPayload.data)
-        setAnalysis(analysisPayload.analysis)
+    setHistory([])
+    setHistoryLoading(true)
+    setHistoryError('')
+    setAnalysis({ status: 'loading' })
+
+    requestJSON(
+      `/api/readings/history?region=${selected}&limit=168`,
+      { signal: controller.signal },
+    ).then(historyPayload => {
+      if (active) setHistory(historyPayload.data)
+    }).catch(requestError => {
+      if (active && requestError.name !== 'AbortError') {
+        setHistoryError('Historical readings are temporarily unavailable.')
       }
-    }).catch(() => active && setAnalysis({ status: 'unavailable' }))
-    return () => { active = false }
-  }, [selected, readings])
+    }).finally(() => {
+      if (active) setHistoryLoading(false)
+    })
+
+    requestJSON(
+      `/api/analysis/regression?region=${selected}&horizon=3`,
+      { signal: controller.signal },
+    ).then(analysisPayload => {
+      if (active) setAnalysis(analysisPayload.analysis)
+    }).catch(requestError => {
+      if (active && requestError.name !== 'AbortError') {
+        setAnalysis({
+          status: 'unavailable',
+          message: 'Model analysis is temporarily unavailable. Live official readings are unaffected.',
+        })
+      }
+    })
+
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [selected, readings, loading])
 
   const byRegion = useMemo(() => Object.fromEntries(readings.map(row => [row.region, row])), [readings])
   const selectedReading = byRegion[selected]
@@ -221,8 +255,8 @@ function App() {
               <div className="region-tabs" role="tablist" aria-label="Select air quality region">{REGIONS.map(region => <button className={selected === region ? 'active' : ''} onClick={() => selectRegion(region)} key={region}>{region}</button>)}</div>
             </div>
           </div>
-          <div className="chart-wrap">
-            {chartData.length > 1 ? <Suspense fallback={<ChartLoading/>}><HistoryChart data={chartData}/></Suspense> : <div className="empty-chart"><span>Collecting history</span><p>Run the backfill command to populate a seven-day trend and unlock regression analysis.</p></div>}
+          <div className="chart-wrap" aria-busy={historyLoading}>
+            {historyLoading ? <ChartLoading/> : historyError ? <div className="empty-chart"><span>History unavailable</span><p>{historyError}</p></div> : chartData.length > 1 ? <Suspense fallback={<ChartLoading/>}><HistoryChart data={chartData}/></Suspense> : <div className="empty-chart"><span>Collecting history</span><p>Run the backfill command to populate a seven-day trend and unlock regression analysis.</p></div>}
           </div>
         </article>
 
@@ -240,14 +274,14 @@ function App() {
         <div className="section-heading"><div><p className="eyebrow">MODEL TRANSPARENCY</p><h2>Experimental three-hour outlook</h2></div><p>Autoregressive OLS · walk-forward evaluated</p></div>
         <div className="model-grid">
           <article className="panel forecast-panel">
-            {analysis?.status === 'ready' ? <>
+            {analysis?.status === 'loading' ? <div className="forecast-chart" aria-busy="true"><ChartLoading/></div> : analysis?.status === 'ready' ? <>
               <div className="forecast-chart"><Suspense fallback={<ChartLoading/>}><ForecastChart data={analysis.forecast}/></Suspense></div>
               <div className="forecast-values">{analysis.forecast.map(item => <div key={item.timestamp}><span>{localTime(item.timestamp)}</span><strong>{item.pm25_1h}</strong><small>{item.lower}–{item.upper} µg/m³</small></div>)}</div>
-            </> : <div className="model-empty"><span className="model-icon">∿</span><h3>Building the evidence base</h3><p>{analysis?.message || 'Analysis becomes available after enough validated hourly readings have been stored.'}</p><small>{analysis?.available ?? 0} / {analysis?.required ?? 20} observations available</small></div>}
+            </> : <div className="model-empty"><span className="model-icon">∿</span><h3>{analysis?.status === 'unavailable' ? 'Analysis unavailable' : 'Building the evidence base'}</h3><p>{analysis?.message || 'Analysis becomes available after enough validated hourly readings have been stored.'}</p>{analysis?.status === 'insufficient_data' && <small>{analysis.available} / {analysis.required} observations available</small>}</div>}
           </article>
           <article className="panel metrics-panel">
             <p className="eyebrow">VALIDATION</p>
-            <h3>{analysis?.status === 'ready' ? (analysis.beats_naive ? 'Model beats persistence' : 'Baseline remains stronger') : 'Pending sufficient data'}</h3>
+            <h3>{analysis?.status === 'ready' ? (analysis.beats_naive ? 'Model beats persistence' : 'Baseline remains stronger') : analysis?.status === 'loading' ? 'Refreshing validation' : analysis?.status === 'unavailable' ? 'Validation unavailable' : 'Pending sufficient data'}</h3>
             <div className="metric-list"><div><span>Walk-forward MAE</span><strong>{analysis?.validation_mae ?? '—'}</strong></div><div><span>Persistence MAE</span><strong>{analysis?.naive_mae ?? '—'}</strong></div><div><span>R²</span><strong>{analysis?.r_squared ?? '—'}</strong></div><div><span>Validation points</span><strong>{analysis?.validation_samples ?? '—'}</strong></div></div>
             <p className="fine-print">Each validation prediction uses only prior observations. The forecast is experimental and never replaces NEA forecasts or health guidance. Confidence ranges reflect historical residual variation, not all sources of uncertainty.</p>
           </article>
