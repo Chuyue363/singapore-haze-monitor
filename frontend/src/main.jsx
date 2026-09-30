@@ -237,7 +237,7 @@ function App() {
       </section>
 
       <section className="model-section">
-        <div className="section-heading"><div><p className="eyebrow">MODEL TRANSPARENCY</p><h2>Experimental three-hour outlook</h2></div><p>Autoregressive OLS · evaluated out of sample</p></div>
+        <div className="section-heading"><div><p className="eyebrow">MODEL TRANSPARENCY</p><h2>Experimental three-hour outlook</h2></div><p>Autoregressive OLS · walk-forward evaluated</p></div>
         <div className="model-grid">
           <article className="panel forecast-panel">
             {analysis?.status === 'ready' ? <>
@@ -248,8 +248,8 @@ function App() {
           <article className="panel metrics-panel">
             <p className="eyebrow">VALIDATION</p>
             <h3>{analysis?.status === 'ready' ? (analysis.beats_naive ? 'Model beats persistence' : 'Baseline remains stronger') : 'Pending sufficient data'}</h3>
-            <div className="metric-list"><div><span>Validation MAE</span><strong>{analysis?.validation_mae ?? '—'}</strong></div><div><span>Naïve MAE</span><strong>{analysis?.naive_mae ?? '—'}</strong></div><div><span>R²</span><strong>{analysis?.r_squared ?? '—'}</strong></div><div><span>Observations</span><strong>{analysis?.observations ?? analysis?.available ?? 0}</strong></div></div>
-            <p className="fine-print">The forecast is experimental and never replaces NEA forecasts or health guidance. Only the latest uninterrupted hourly sequence is modelled. Confidence ranges reflect historical residual variation, not all sources of uncertainty.</p>
+            <div className="metric-list"><div><span>Walk-forward MAE</span><strong>{analysis?.validation_mae ?? '—'}</strong></div><div><span>Persistence MAE</span><strong>{analysis?.naive_mae ?? '—'}</strong></div><div><span>R²</span><strong>{analysis?.r_squared ?? '—'}</strong></div><div><span>Validation points</span><strong>{analysis?.validation_samples ?? '—'}</strong></div></div>
+            <p className="fine-print">Each validation prediction uses only prior observations. The forecast is experimental and never replaces NEA forecasts or health guidance. Confidence ranges reflect historical residual variation, not all sources of uncertainty.</p>
           </article>
         </div>
       </section>

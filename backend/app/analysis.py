@@ -35,6 +35,30 @@ def _features(values: list[float], index: int) -> list[float]:
     return [1.0, values[index - 1], sum(last3) / 3, trend]
 
 
+def _walk_forward_validation(
+    x: np.ndarray,
+    y: np.ndarray,
+    values: list[float],
+    initial_training_samples: int,
+) -> tuple[float, float, int]:
+    model_predictions: list[float] = []
+    naive_predictions: list[float] = []
+    actual_values: list[float] = []
+
+    for test_index in range(initial_training_samples, len(y)):
+        beta, *_ = np.linalg.lstsq(x[:test_index], y[:test_index], rcond=None)
+        model_predictions.append(float(np.dot(x[test_index], beta)))
+        naive_predictions.append(values[test_index + 2])
+        actual_values.append(float(y[test_index]))
+
+    actual = np.array(actual_values, dtype=float)
+    model = np.array(model_predictions, dtype=float)
+    naive = np.array(naive_predictions, dtype=float)
+    model_mae = float(np.mean(np.abs(model - actual)))
+    naive_mae = float(np.mean(np.abs(naive - actual)))
+    return model_mae, naive_mae, len(actual_values)
+
+
 def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
     all_points = _series(rows)
     points, gap_count = _latest_contiguous_segment(all_points)
@@ -55,12 +79,12 @@ def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
 
     split = max(10, int(len(y) * 0.8))
     split = min(split, len(y) - 1)
-    beta_train, *_ = np.linalg.lstsq(x[:split], y[:split], rcond=None)
-    predicted_test = x[split:] @ beta_train
-    actual_test = y[split:]
-    model_mae = float(np.mean(np.abs(predicted_test - actual_test)))
-    naive_predictions = np.array(values[split + 2:-1], dtype=float)
-    naive_mae = float(np.mean(np.abs(naive_predictions - actual_test)))
+    model_mae, naive_mae, validation_samples = _walk_forward_validation(
+        x,
+        y,
+        values,
+        split,
+    )
 
     beta, *_ = np.linalg.lstsq(x, y, rcond=None)
     fitted = x @ beta
@@ -93,6 +117,9 @@ def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
         "total_observations": len(all_points),
         "gap_count": gap_count,
         "training_samples": len(y),
+        "initial_training_samples": split,
+        "validation_samples": validation_samples,
+        "validation_method": "Expanding-window walk-forward",
         "r_squared": round(r_squared, 3),
         "validation_mae": round(model_mae, 2),
         "naive_mae": round(naive_mae, 2),

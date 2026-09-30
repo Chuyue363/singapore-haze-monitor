@@ -19,7 +19,7 @@ The product answers three different questions without conflating them:
 - Seven-day signal chart, 3-hour moving average, and auditable CSV export
 - Privacy-preserving town selector mapped to NEA's five reporting regions
 - Health-profile guidance that keeps immediate PM2.5 context separate from 24-hour PSI exposure guidance
-- Gap-safe autoregressive OLS model with chronological holdout evaluation against persistence
+- Gap-safe autoregressive OLS model with expanding-window walk-forward evaluation against persistence
 - Responsive loading, error, empty, and insufficient-data states
 - Isolated backend tests, reproducible frontend lockfile, CI, and production container
 
@@ -96,8 +96,8 @@ The current model predicts 1-hour PM2.5 using the previous hour, trailing 3-hour
 
 1. deduplicates observations by timestamp;
 2. uses only the latest uninterrupted hourly segment;
-3. reserves the newest 20% of samples as a chronological holdout;
-4. reports MAE beside a persistence baseline (the previous value); and
+3. reserves the newest 20% of samples for expanding-window walk-forward validation;
+4. refits using only prior observations at every validation step and reports MAE beside a persistence baseline (the previous value); and
 5. refits on all eligible observations only after evaluation, for the displayed three-hour recursive estimate.
 
 The interval is an approximate residual-based range. It does not capture weather, wind, fire, satellite, or policy information and must not be interpreted as an NEA forecast. See [methodology notes](docs/methodology.md) for limitations and next experiments.
@@ -123,7 +123,7 @@ A production deployment still needs persistent storage and a scheduled call to `
 
 ## Roadmap
 
-- Walk-forward evaluation across multiple haze and non-haze periods
+- Multi-period evaluation across distinct haze and non-haze episodes
 - Weather, wind, rainfall, and regional hotspot features with source-aware timestamps
 - Scheduled production ingestion and freshness alerting
 - Optional text search and aliases for the location-to-region helper
