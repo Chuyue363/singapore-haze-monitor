@@ -14,6 +14,7 @@ def backfill(days: int) -> dict:
         "received": 0,
         "accepted": 0,
         "rejected": 0,
+        "review_flagged": 0,
         "inserted": 0,
         "dates_completed": 0,
         "failed_dates": [],
@@ -28,11 +29,14 @@ def backfill(days: int) -> dict:
             time.sleep(2)
             continue
         inserted = insert_readings(cleaned)
-        for key in ("received", "accepted", "rejected"):
+        for key in ("received", "accepted", "rejected", "review_flagged"):
             total[key] += report[key]
         total["inserted"] += inserted
         total["dates_completed"] += 1
-        print(f"{day}: accepted {report['accepted']}, inserted {inserted}")
+        print(
+            f"{day}: accepted {report['accepted']}, inserted {inserted}, "
+            f"flagged {report['review_flagged']} for review"
+        )
         time.sleep(1)
     record_ingestion(
         total,

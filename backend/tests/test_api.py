@@ -81,6 +81,38 @@ def test_cleaning_rejects_bad_region_and_deduplicates():
     assert report["rejected"] == 1
 
 
+def test_cleaning_compares_regional_spikes_at_the_same_timestamp():
+    first_timestamp = "2026-09-29T01:00:00+08:00"
+    second_timestamp = "2026-09-29T02:00:00+08:00"
+
+    def row(region: str, timestamp: str, pm25: float) -> dict:
+        return {
+            "region": region,
+            "reading_timestamp": timestamp,
+            "updated_timestamp": timestamp,
+            "psi_24h": 80,
+            "pm25_1h": pm25,
+            "pm25_24h": 35,
+            "source": "test",
+        }
+
+    raw = [
+        row(region, first_timestamp, value)
+        for region, value in zip(REGIONS, (50, 48, 52, 400, 49), strict=True)
+    ] + [
+        row(region, second_timestamp, value)
+        for region, value in zip(REGIONS, (400, 410, 390, 405, 395), strict=True)
+    ]
+
+    cleaned, report = clean_readings(raw)
+    flagged = [item for item in cleaned if item["quality_status"] == "review"]
+
+    assert [(item["region"], item["reading_timestamp"]) for item in flagged] == [
+        ("west", first_timestamp)
+    ]
+    assert report["review_flagged"] == 1
+
+
 def test_unknown_region_is_rejected():
     client = create_app().test_client()
     assert client.get("/api/readings/history?region=moon").status_code == 400

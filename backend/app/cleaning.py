@@ -64,19 +64,29 @@ def clean_readings(rows: list[dict]) -> tuple[list[dict], dict]:
         except (KeyError, TypeError, ValueError) as exc:
             rejected.append({"reason": str(exc), "row": raw})
 
-    values = [row["pm25_1h"] for row in cleaned if row["pm25_1h"] is not None]
-    if len(values) >= 3:
-        centre = median(values)
-        for row in cleaned:
-            value = row["pm25_1h"]
-            if value is not None and value > max(centre * 3, centre + 150):
-                row["quality_status"] = "review"
-                row["quality_notes"] = "Large cross-region deviation; retained as a possible real spike."
+    rows_by_timestamp: dict[str, list[dict]] = {}
+    for row in cleaned:
+        rows_by_timestamp.setdefault(row["reading_timestamp"], []).append(row)
+
+    for timestamp_rows in rows_by_timestamp.values():
+        values = [row["pm25_1h"] for row in timestamp_rows if row["pm25_1h"] is not None]
+        if len(values) >= 3:
+            centre = median(values)
+            for row in timestamp_rows:
+                value = row["pm25_1h"]
+                if value is not None and value > max(centre * 3, centre + 150):
+                    row["quality_status"] = "review"
+                    row["quality_notes"] = (
+                        "Large same-timestamp cross-region deviation; retained as a possible real spike."
+                    )
+
+    review_flagged = sum(row["quality_status"] == "review" for row in cleaned)
 
     return cleaned, {
         "received": len(rows),
         "accepted": len(cleaned),
         "rejected": len(rejected),
         "duplicates_removed": len(rows) - len(cleaned) - len(rejected),
+        "review_flagged": review_flagged,
         "rejections": rejected[:10],
     }

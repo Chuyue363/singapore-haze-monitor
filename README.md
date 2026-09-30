@@ -14,7 +14,7 @@ The product answers three different questions without conflating them:
 
 - Live and historical PSI / PM2.5 ingestion from data.gov.sg
 - Five-region dashboard with per-region latest readings, coverage checks, and conservative stale-data states
-- Schema validation, deduplication, range checks, and review flags for unusual spikes
+- Schema validation, deduplication, range checks, and timestamp-scoped cross-region review flags
 - Retry and backoff for upstream rate limits; last-known-valid data remains available during outages
 - Seven-day signal chart, 3-hour moving average, and auditable CSV export
 - Privacy-preserving town selector mapped to NEA's five reporting regions
