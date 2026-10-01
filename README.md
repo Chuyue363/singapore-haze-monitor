@@ -20,7 +20,7 @@ The product answers three different questions without conflating them:
 - Visible pipeline audit with validated-row, observation, review-flag, and ingestion counts
 - Privacy-preserving town selector mapped to NEA's five reporting regions
 - Official health-profile actions that keep immediate 1-hour PM2.5 guidance separate from 24-hour PSI exposure guidance
-- Gap-safe autoregressive OLS model with expanding-window walk-forward evaluation against persistence
+- Gap-safe autoregressive OLS model with expanding-window walk-forward evaluation against persistence and chronological stability slices
 - Responsive loading, error, empty, timeout, and insufficient-data states with obsolete request cancellation
 - Isolated backend tests, reproducible frontend lockfile, CI, production container, and restrictive browser security headers
 
@@ -100,9 +100,10 @@ The current model predicts 1-hour PM2.5 using the previous hour, trailing 3-hour
 1. deduplicates observations by timestamp;
 2. uses only the latest uninterrupted hourly segment;
 3. reserves the newest 20% of samples for expanding-window walk-forward validation;
-4. refits using only prior observations at every validation step and reports MAE plus relative skill beside a persistence baseline (the previous value); and
-5. derives each horizon's range from the 90th percentile of its walk-forward absolute errors when at least five are available; and
-6. refits on all eligible observations only after evaluation, for the displayed three-hour recursive estimate.
+4. refits using only prior observations at every validation step and reports MAE plus relative skill beside a persistence baseline (the previous value);
+5. splits the held-out predictions into as many as four chronological periods, with at least five validation points per period, to expose whether performance is stable through time;
+6. derives each horizon's range from the 90th percentile of its walk-forward absolute errors when at least five are available; and
+7. refits on all eligible observations only after evaluation, for the displayed three-hour recursive estimate.
 
 Sparse horizons fall back to an approximate residual-based range. Neither method captures weather, wind, fire, satellite, or policy information, and the result must not be interpreted as an NEA forecast. See [methodology notes](docs/methodology.md) for limitations and next experiments.
 

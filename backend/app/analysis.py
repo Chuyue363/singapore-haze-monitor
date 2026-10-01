@@ -41,10 +41,11 @@ def _walk_forward_validation(
     values: list[float],
     initial_training_samples: int,
     horizon: int,
-) -> tuple[float, float, int, list[list[float]]]:
+) -> tuple[float, float, int, list[list[float]], list[tuple[int, float, float]]]:
     absolute_errors: list[list[float]] = [[] for _ in range(horizon)]
     naive_predictions: list[float] = []
     actual_values: list[float] = []
+    validation_records: list[tuple[int, float, float]] = []
 
     for test_index in range(initial_training_samples, len(y)):
         beta, *_ = np.linalg.lstsq(x[:test_index], y[:test_index], rcond=None)
@@ -61,12 +62,19 @@ def _walk_forward_validation(
             projected.append(estimate)
         naive_predictions.append(values[test_index + 2])
         actual_values.append(float(y[test_index]))
+        validation_records.append(
+            (
+                test_index + 3,
+                absolute_errors[0][-1],
+                abs(values[test_index + 2] - float(y[test_index])),
+            )
+        )
 
     actual = np.array(actual_values, dtype=float)
     naive = np.array(naive_predictions, dtype=float)
     model_mae = float(np.mean(absolute_errors[0]))
     naive_mae = float(np.mean(np.abs(naive - actual)))
-    return model_mae, naive_mae, len(actual_values), absolute_errors
+    return model_mae, naive_mae, len(actual_values), absolute_errors, validation_records
 
 
 def _interval_width(errors: list[float], residual_std: float) -> tuple[float, str]:
@@ -80,6 +88,36 @@ def _relative_skill_percent(model_mae: float, naive_mae: float) -> float | None:
     if naive_mae == 0:
         return None
     return round((1 - model_mae / naive_mae) * 100, 1)
+
+
+def _validation_periods(
+    records: list[tuple[int, float, float]],
+    timestamps: list[datetime],
+) -> list[dict]:
+    if not records:
+        return []
+
+    period_count = min(4, max(1, len(records) // 5))
+    periods = []
+    for period_index in range(period_count):
+        start = period_index * len(records) // period_count
+        end = (period_index + 1) * len(records) // period_count
+        segment = records[start:end]
+        model_mae = sum(record[1] for record in segment) / len(segment)
+        naive_mae = sum(record[2] for record in segment) / len(segment)
+        skill_percent = _relative_skill_percent(model_mae, naive_mae)
+        periods.append(
+            {
+                "start": timestamps[segment[0][0]].isoformat(),
+                "end": timestamps[segment[-1][0]].isoformat(),
+                "samples": len(segment),
+                "model_mae": round(model_mae, 2),
+                "naive_mae": round(naive_mae, 2),
+                "skill_percent": skill_percent,
+                "beats_naive": model_mae < naive_mae,
+            }
+        )
+    return periods
 
 
 def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
@@ -103,13 +141,14 @@ def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
 
     split = max(10, int(len(y) * 0.8))
     split = min(split, len(y) - 1)
-    model_mae, naive_mae, validation_samples, errors_by_horizon = _walk_forward_validation(
-        x,
-        y,
-        values,
-        split,
-        bounded_horizon,
-    )
+    (
+        model_mae,
+        naive_mae,
+        validation_samples,
+        errors_by_horizon,
+        validation_records,
+    ) = _walk_forward_validation(x, y, values, split, bounded_horizon)
+    validation_periods = _validation_periods(validation_records, timestamps)
 
     beta, *_ = np.linalg.lstsq(x, y, rcond=None)
     fitted = x @ beta
@@ -153,6 +192,8 @@ def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
         "initial_training_samples": split,
         "validation_samples": validation_samples,
         "validation_method": "Expanding-window walk-forward",
+        "validation_periods": validation_periods,
+        "periods_beating_naive": sum(period["beats_naive"] for period in validation_periods),
         "interval_method": (
             "Horizon-specific 90th percentile of walk-forward absolute error; "
             "residual fallback below five samples"

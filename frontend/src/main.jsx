@@ -41,6 +41,27 @@ function ChartLoading() {
   return <div className="chart-loading" role="status" aria-label="Loading chart"><Skeleton/><Skeleton/><Skeleton/></div>
 }
 
+function ValidationPeriods({ analysis }) {
+  const periods = analysis?.validation_periods || []
+  if (analysis?.status !== 'ready' || periods.length === 0) return null
+
+  return <article className="panel period-panel">
+    <div className="period-heading">
+      <div><p className="eyebrow">CHRONOLOGICAL STABILITY</p><h3>{analysis.periods_beating_naive}/{periods.length} periods beat persistence</h3></div>
+      <p>Consecutive slices of the held-out walk-forward sample</p>
+    </div>
+    <div className="period-grid">
+      {periods.map((period, index) => <div className="period-card" key={period.start}>
+        <span>Period {index + 1} · {period.samples} points</span>
+        <strong className={period.beats_naive ? 'positive-skill' : 'negative-skill'}>{formatSkill(period.skill_percent)}</strong>
+        <small>{localTime(period.start, { day: true })} – {localTime(period.end, { day: true })}</small>
+        <p>Model MAE {period.model_mae} · persistence {period.naive_mae}</p>
+      </div>)}
+    </div>
+    <p className="period-note">Periods test consistency through time; they are not independent haze episodes. Positive skill means the model made smaller errors than simply repeating the previous reading.</p>
+  </article>
+}
+
 function RegionCard({ region, reading, selected, onSelect }) {
   const status = psiBand(reading?.psi_24h)
   const label = `${region} region: 24-hour PSI ${reading?.psi_24h ?? 'unavailable'}, ${status.label}; 1-hour PM2.5 ${reading?.pm25_1h ?? 'unavailable'} micrograms per cubic metre`
@@ -299,6 +320,7 @@ function App() {
             <p className="fine-print">Positive skill means lower error than persistence; no percentage is shown when persistence is perfect. Each validation prediction uses only prior observations. Horizon ranges use walk-forward errors with a residual fallback. This experiment never replaces NEA guidance.</p>
           </article>
         </div>
+        <ValidationPeriods analysis={analysis}/>
       </section>
 
       <section className="panel pipeline-panel" aria-label="Data pipeline audit">

@@ -26,6 +26,12 @@ def test_regression_builds_forecast():
     assert result["initial_training_samples"] == 37
     assert result["validation_samples"] == 10
     assert result["skill_percent"] > 0
+    assert len(result["validation_periods"]) == 2
+    assert sum(period["samples"] for period in result["validation_periods"]) == 10
+    assert result["periods_beating_naive"] == sum(
+        period["beats_naive"] for period in result["validation_periods"]
+    )
+    assert result["validation_periods"][0]["end"] < result["validation_periods"][1]["start"]
     assert [item["interval_samples"] for item in result["forecast"]] == [10, 9, 8]
     assert len({item["persistence_pm25_1h"] for item in result["forecast"]}) == 1
     assert all(item["interval_basis"] == "walk_forward_p90" for item in result["forecast"])
@@ -113,3 +119,21 @@ def test_regression_does_not_bridge_hourly_gaps():
     assert result["available"] == 10
     assert result["total_observations"] == 35
     assert result["gap_count"] == 1
+
+
+def test_regression_caps_chronological_validation_at_four_periods():
+    start = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    rows = [
+        {
+            "reading_timestamp": (start + timedelta(hours=index)).isoformat(),
+            "pm25_1h": 20 + index * 0.1 + index % 5,
+        }
+        for index in range(103)
+    ]
+
+    result = regression_analysis(rows)
+
+    assert result["status"] == "ready"
+    assert result["validation_samples"] == 20
+    assert len(result["validation_periods"]) == 4
+    assert [period["samples"] for period in result["validation_periods"]] == [5, 5, 5, 5]
