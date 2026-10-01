@@ -12,7 +12,7 @@ The database stores both the provider's reading timestamp and update timestamp. 
 
 Cache policy follows response semantics: forced refreshes, health checks, and errors are never stored; ordinary read-only API responses use a short stale-if-error window; and fingerprinted frontend assets can be cached immutably.
 
-Every Flask response includes a same-origin Content Security Policy and defensive browser headers. Framing, MIME sniffing, unnecessary device permissions, and cross-origin referrer leakage are restricted without assuming HTTPS at the application layer.
+Every Flask response includes a same-origin Content Security Policy and defensive browser headers. The production frontend uses local assets and system font stacks, so it does not need third-party font requests. Framing, MIME sniffing, unnecessary device permissions, and cross-origin referrer leakage are restricted without assuming HTTPS at the application layer.
 
 An in-process lock serialises stale-data refreshes and rechecks freshness after acquiring the lock, so simultaneous requests handled by the same server process share one upstream fetch. A multi-process or multi-replica deployment would need a distributed lock or, preferably, a dedicated scheduled ingestion worker.
 
