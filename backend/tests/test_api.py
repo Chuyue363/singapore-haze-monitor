@@ -1,4 +1,7 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from threading import Event
+from time import sleep
 
 from app import api
 from app.api import create_app
@@ -172,6 +175,58 @@ def test_failed_refresh_serves_stored_data_and_records_audit(monkeypatch, caplog
     assert database_summary()["last_ingestion"]["status"] == "failed"
     assert "nea_refresh_failed error_type=RuntimeError" in caplog.text
     assert "simulated upstream failure" not in caplog.text
+
+
+def test_simultaneous_stale_requests_share_one_upstream_refresh(monkeypatch):
+    create_app()
+    first_fetch_started = Event()
+    release_first_fetch = Event()
+    second_request_started = Event()
+    fetch_calls = 0
+
+    def controlled_fetch() -> list[dict]:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        first_fetch_started.set()
+        assert release_first_fetch.wait(timeout=2)
+        timestamp = datetime.now(timezone.utc).isoformat()
+        return [
+            {
+                "region": region,
+                "reading_timestamp": timestamp,
+                "updated_timestamp": timestamp,
+                "psi_24h": 80,
+                "pm25_1h": 42,
+                "pm25_24h": 30,
+                "source": "test",
+            }
+            for region in REGIONS
+        ]
+
+    def second_request() -> tuple[list[dict], dict]:
+        second_request_started.set()
+        return api._refresh_if_stale()
+
+    monkeypatch.setattr(api, "fetch_latest", controlled_fetch)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(api._refresh_if_stale)
+        assert first_fetch_started.wait(timeout=2)
+        second = executor.submit(second_request)
+        assert second_request_started.wait(timeout=2)
+        sleep(0.05)
+        release_first_fetch.set()
+        first_rows, first_refresh = first.result(timeout=2)
+        second_rows, second_refresh = second.result(timeout=2)
+
+    assert fetch_calls == 1
+    assert len(first_rows) == len(REGIONS)
+    assert len(second_rows) == len(REGIONS)
+    assert first_refresh["succeeded"] is True
+    assert second_refresh == {
+        "attempted": False,
+        "succeeded": False,
+        "message": "Using readings refreshed by another request.",
+    }
 
 
 def test_summary_exposes_data_quality_counts():

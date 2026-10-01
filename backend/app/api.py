@@ -5,6 +5,7 @@ import io
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
@@ -23,6 +24,7 @@ from .db import (
 from .nea_client import fetch_latest
 
 LOGGER = logging.getLogger(__name__)
+_REFRESH_LOCK = Lock()
 
 
 def _age_minutes(timestamp: str | None) -> float | None:
@@ -52,17 +54,24 @@ def _health_snapshot() -> tuple[dict, bool]:
     }, ready
 
 
+def _needs_refresh(rows: list[dict]) -> bool:
+    age, missing_regions = _freshness(rows)
+    return bool(missing_regions) or age is None or age > STALE_AFTER_MINUTES
+
+
 def _refresh_if_stale(force: bool = False) -> tuple[list[dict], dict]:
     stored = latest_readings()
-    age, missing_regions = _freshness(stored)
-    should_refresh = (
-        force
-        or bool(missing_regions)
-        or age is None
-        or age > STALE_AFTER_MINUTES
-    )
     refresh = {"attempted": False, "succeeded": False, "message": "Using stored readings."}
-    if should_refresh:
+
+    if not force and not _needs_refresh(stored):
+        return stored, refresh
+
+    with _REFRESH_LOCK:
+        stored = latest_readings()
+        if not force and not _needs_refresh(stored):
+            refresh["message"] = "Using readings refreshed by another request."
+            return stored, refresh
+
         refresh["attempted"] = True
         try:
             cleaned, report = clean_readings(fetch_latest())
