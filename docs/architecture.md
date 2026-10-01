@@ -12,4 +12,6 @@ The database stores both the provider's reading timestamp and update timestamp. 
 
 Cache policy follows response semantics: forced refreshes, health checks, and errors are never stored; ordinary read-only API responses use a short stale-if-error window; and fingerprinted frontend assets can be cached immutably.
 
+Operations distinguish liveness from readiness. The container liveness probe confirms that Flask can respond without depending on external data, while readiness returns a failure status until all five regions are present and the oldest regional reading is within the allowed freshness window.
+
 Refresh outcomes emit structured, non-sensitive operational events and are persisted in the ingestion audit. The next production improvements are a separate scheduled worker, centralised log shipping, and external freshness alerting. A queue, cache, or microservice split is not justified until traffic or ingestion volume requires one.

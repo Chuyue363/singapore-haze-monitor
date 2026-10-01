@@ -84,7 +84,9 @@ CI repeats both checks and builds the production container on every push and pul
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /api/health` | Service, oldest-region freshness, missing regions, database, and last-ingestion status |
+| `GET /api/health` | Informational service, freshness, coverage, database, and ingestion status |
+| `GET /api/health/live` | Process liveness probe; used by the production container |
+| `GET /api/health/ready` | Returns 503 until all five regions are present and sufficiently fresh |
 | `GET /api/readings/latest` | Latest reading per region with coverage metadata; refreshes stale or incomplete data |
 | `GET /api/readings/history?region=central&limit=168` | Chronological regional history |
 | `GET /api/readings/export.csv?region=central` | Auditable regional CSV export |

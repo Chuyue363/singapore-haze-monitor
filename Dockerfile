@@ -18,4 +18,6 @@ COPY backend/ ./backend/
 COPY --from=frontend-build /frontend/dist ./frontend/dist
 RUN mkdir -p /data
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health/live', timeout=2)"]
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app.api:create_app()"]

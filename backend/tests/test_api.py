@@ -9,11 +9,19 @@ from app.db import database_summary, insert_readings, latest_readings
 def test_health():
     client = create_app().test_client()
     response = client.get("/api/health")
+    liveness = client.get("/api/health/live")
+    readiness = client.get("/api/health/ready")
     assert response.status_code == 200
     assert response.json["status"] == "degraded"
     assert response.json["missing_regions"] == list(REGIONS)
     assert "database" in response.json
     assert response.headers["Cache-Control"] == "no-store"
+    assert liveness.status_code == 200
+    assert liveness.json == {"status": "ok"}
+    assert liveness.headers["Cache-Control"] == "no-store"
+    assert readiness.status_code == 503
+    assert readiness.json["status"] == "degraded"
+    assert readiness.headers["Cache-Control"] == "no-store"
 
 
 def test_latest_and_history():
@@ -37,6 +45,7 @@ def test_latest_and_history():
     assert latest.json["meta"]["regions_reporting"] == 5
     assert latest.json["meta"]["missing_regions"] == []
     assert len(client.get("/api/readings/history?region=central").json["data"]) >= 1
+    assert client.get("/api/health/ready").status_code == 200
 
 
 def test_latest_readings_keeps_each_region_most_recent_observation():

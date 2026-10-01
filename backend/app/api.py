@@ -40,6 +40,18 @@ def _freshness(rows: list[dict]) -> tuple[float | None, list[str]]:
     return max(available_ages, default=None), missing_regions
 
 
+def _health_snapshot() -> tuple[dict, bool]:
+    summary = database_summary()
+    age, missing_regions = _freshness(latest_readings())
+    ready = age is not None and age <= STALE_AFTER_MINUTES * 2 and not missing_regions
+    return {
+        "status": "ok" if ready else "degraded",
+        "data_age_minutes": age,
+        "missing_regions": missing_regions,
+        "database": summary,
+    }, ready
+
+
 def _refresh_if_stale(force: bool = False) -> tuple[list[dict], dict]:
     stored = latest_readings()
     age, missing_regions = _freshness(stored)
@@ -92,7 +104,7 @@ def create_app() -> Flask:
 
         path = request.path
         forced_refresh = path == "/api/readings/latest" and request.args.get("refresh") == "true"
-        if response.status_code >= 400 or path == "/api/health" or forced_refresh:
+        if response.status_code >= 400 or path.startswith("/api/health") or forced_refresh:
             response.headers["Cache-Control"] = "no-store"
         elif path.startswith("/assets/"):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
@@ -104,15 +116,17 @@ def create_app() -> Flask:
 
     @app.get("/api/health")
     def health():
-        summary = database_summary()
-        age, missing_regions = _freshness(latest_readings())
-        healthy = age is not None and age <= STALE_AFTER_MINUTES * 2 and not missing_regions
-        return jsonify({
-            "status": "ok" if healthy else "degraded",
-            "data_age_minutes": age,
-            "missing_regions": missing_regions,
-            "database": summary,
-        })
+        snapshot, _ = _health_snapshot()
+        return jsonify(snapshot)
+
+    @app.get("/api/health/live")
+    def liveness():
+        return jsonify({"status": "ok"})
+
+    @app.get("/api/health/ready")
+    def readiness():
+        snapshot, ready = _health_snapshot()
+        return jsonify(snapshot), 200 if ready else 503
 
     @app.get("/")
     def frontend():
