@@ -81,10 +81,20 @@ def insert_readings(rows: list[dict]) -> int:
         for row in rows:
             result = connection.execute(
                 """
-                INSERT OR IGNORE INTO air_quality_readings
+                INSERT INTO air_quality_readings
                 (region, reading_timestamp, updated_timestamp, psi_24h, pm25_1h, pm25_24h,
                  source, quality_status, quality_notes, ingested_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(region, reading_timestamp, source) DO UPDATE SET
+                    updated_timestamp = excluded.updated_timestamp,
+                    psi_24h = excluded.psi_24h,
+                    pm25_1h = excluded.pm25_1h,
+                    pm25_24h = excluded.pm25_24h,
+                    quality_status = excluded.quality_status,
+                    quality_notes = excluded.quality_notes,
+                    ingested_at = excluded.ingested_at
+                WHERE julianday(excluded.updated_timestamp) >
+                      julianday(air_quality_readings.updated_timestamp)
                 """,
                 (
                     row["region"], row["reading_timestamp"], row["updated_timestamp"],

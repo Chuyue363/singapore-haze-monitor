@@ -95,6 +95,37 @@ def test_latest_readings_keeps_each_region_most_recent_observation():
     assert rows[-1]["pm25_1h"] == 24
 
 
+def test_newer_provider_revision_replaces_observation_without_rollback():
+    original = {
+        "region": "central",
+        "reading_timestamp": "2026-09-29T01:00:00+08:00",
+        "updated_timestamp": "2026-09-29T01:05:00+08:00",
+        "psi_24h": 80,
+        "pm25_1h": 40,
+        "pm25_24h": 30,
+        "source": "test",
+    }
+    newer_revision = {
+        **original,
+        "updated_timestamp": "2026-09-29T01:10:00+08:00",
+        "pm25_1h": 44,
+    }
+    older_revision = {
+        **original,
+        "updated_timestamp": "2026-09-29T01:02:00+08:00",
+        "pm25_1h": 999,
+    }
+
+    assert insert_readings([original]) == 1
+    assert insert_readings([newer_revision]) == 1
+    assert insert_readings([older_revision]) == 0
+
+    stored = latest_readings()
+    assert len(stored) == 1
+    assert stored[0]["updated_timestamp"] == newer_revision["updated_timestamp"]
+    assert stored[0]["pm25_1h"] == 44
+
+
 def test_cleaning_rejects_bad_region_and_deduplicates():
     valid = {
         "region": "Central",
