@@ -108,6 +108,22 @@ def create_app() -> Flask:
 
     @app.after_request
     def cache_headers(response: Response) -> Response:
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "base-uri 'self'; "
+            "connect-src 'self'; "
+            "font-src 'self'; "
+            "frame-ancestors 'none'; "
+            "img-src 'self' data:; "
+            "object-src 'none'; "
+            "script-src 'self'; "
+            "style-src 'self'"
+        )
+        response.headers["Permissions-Policy"] = "camera=(), geolocation=(), microphone=()"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+
         if request.method != "GET":
             return response
 

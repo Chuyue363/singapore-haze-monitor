@@ -27,6 +27,22 @@ def test_health():
     assert readiness.headers["Cache-Control"] == "no-store"
 
 
+def test_responses_include_browser_security_headers():
+    response = create_app().test_client().get("/api/health/live")
+
+    assert response.headers["Content-Security-Policy"] == (
+        "default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; "
+        "frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; "
+        "script-src 'self'; style-src 'self'"
+    )
+    assert response.headers["Permissions-Policy"] == (
+        "camera=(), geolocation=(), microphone=()"
+    )
+    assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+
+
 def test_latest_and_history():
     timestamp = datetime.now(timezone.utc).isoformat()
     insert_readings([

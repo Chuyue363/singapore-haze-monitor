@@ -22,7 +22,7 @@ The product answers three different questions without conflating them:
 - Official health-profile actions that keep immediate 1-hour PM2.5 guidance separate from 24-hour PSI exposure guidance
 - Gap-safe autoregressive OLS model with expanding-window walk-forward evaluation against persistence
 - Responsive loading, error, empty, timeout, and insufficient-data states with obsolete request cancellation
-- Isolated backend tests, reproducible frontend lockfile, CI, and production container
+- Isolated backend tests, reproducible frontend lockfile, CI, production container, and restrictive browser security headers
 
 ## Architecture
 
