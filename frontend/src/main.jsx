@@ -2,7 +2,7 @@ import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useStat
 import { createRoot } from 'react-dom/client'
 import { requestJSON } from './api.js'
 import { pmBand, pmGuidance, psiBand, psiGuidance } from './guidance.js'
-import { readingsRevision } from './readings.js'
+import { readingsRevision, withHourlyMovingAverage } from './readings.js'
 import { REGION_TOWNS, regionForTown } from './regions.js'
 import './styles.css'
 
@@ -220,15 +220,10 @@ function App() {
   const byRegion = useMemo(() => Object.fromEntries(readings.map(row => [row.region, row])), [readings])
   const selectedReading = byRegion[selected]
   const selectedStatus = psiBand(selectedReading?.psi_24h)
-  const chartData = useMemo(() => history.map((row, index, allRows) => {
-    const window = allRows.slice(Math.max(0, index - 2), index + 1)
-      .map(item => item.pm25_1h).filter(value => value != null)
-    return {
-      ...row,
-      label: localTime(row.reading_timestamp, { day: true }),
-      pm25_ma3: window.length ? Math.round(window.reduce((sum, value) => sum + value, 0) / window.length * 10) / 10 : null,
-    }
-  }), [history])
+  const chartData = useMemo(() => withHourlyMovingAverage(history).map(row => ({
+    ...row,
+    label: localTime(row.reading_timestamp, { day: true }),
+  })), [history])
   const highest = useMemo(() => readings.reduce((best, row) =>
     (row.pm25_1h ?? -1) > (best?.pm25_1h ?? -1) ? row : best, null), [readings])
 

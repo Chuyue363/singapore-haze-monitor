@@ -31,8 +31,8 @@ export function HistoryChart({ data }) {
         labelStyle={{ color: '#667085' }}
         formatter={(value, name) => [`${value} µg/m³`, name === 'pm25_ma3' ? '3-hour average' : 'Hourly PM2.5']}
       />
-      <Area type="monotone" dataKey="pm25_1h" name="Hourly PM2.5" stroke="#246bfd" strokeWidth={2.5} fill="url(#pmFill)" connectNulls/>
-      <Line type="monotone" dataKey="pm25_ma3" name="3-hour average" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="5 5" dot={false} connectNulls/>
+      <Area type="monotone" dataKey="pm25_1h" name="Hourly PM2.5" stroke="#246bfd" strokeWidth={2.5} fill="url(#pmFill)"/>
+      <Line type="monotone" dataKey="pm25_ma3" name="3-hour average" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="5 5" dot={false}/>
     </AreaChart>
   </ResponsiveContainer>
 }
