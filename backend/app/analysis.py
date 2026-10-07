@@ -4,6 +4,14 @@ from datetime import datetime, timedelta
 
 import numpy as np
 
+from .cleaning import NUMERIC_RANGES
+
+PM25_MIN, PM25_MAX = NUMERIC_RANGES["pm25_1h"]
+
+
+def _bounded_pm25(value: float) -> float:
+    return min(PM25_MAX, max(PM25_MIN, value))
+
 
 def _series(rows: list[dict]) -> list[tuple[datetime, float]]:
     unique: dict[str, float] = {}
@@ -54,8 +62,7 @@ def _walk_forward_validation(
             target_index = test_index + 3 + step_index
             if target_index >= len(values):
                 break
-            estimate = max(
-                0.0,
+            estimate = _bounded_pm25(
                 float(np.dot(_features(projected, len(projected)), beta)),
             )
             absolute_errors[step_index].append(abs(estimate - values[target_index]))
@@ -163,7 +170,9 @@ def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
     forecasts = []
     last_time = timestamps[-1]
     for step in range(1, bounded_horizon + 1):
-        estimate = max(0.0, float(np.dot(_features(projected, len(projected)), beta)))
+        estimate = _bounded_pm25(
+            float(np.dot(_features(projected, len(projected)), beta))
+        )
         projected.append(estimate)
         interval_width, interval_basis = _interval_width(
             errors_by_horizon[step - 1],
@@ -174,8 +183,8 @@ def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
                 "timestamp": (last_time + timedelta(hours=step)).isoformat(),
                 "pm25_1h": round(estimate, 1),
                 "persistence_pm25_1h": round(values[-1], 1),
-                "lower": round(max(0, estimate - interval_width), 1),
-                "upper": round(estimate + interval_width, 1),
+                "lower": round(_bounded_pm25(estimate - interval_width), 1),
+                "upper": round(_bounded_pm25(estimate + interval_width), 1),
                 "interval_basis": interval_basis,
                 "interval_samples": len(errors_by_horizon[step - 1]),
             }
@@ -185,6 +194,7 @@ def regression_analysis(rows: list[dict], horizon: int = 3) -> dict:
         "status": "ready",
         "method": "Autoregressive ordinary least squares",
         "features": ["previous hour", "three-hour mean", "three-hour trend"],
+        "forecast_bounds_pm25_1h": [PM25_MIN, PM25_MAX],
         "observations": len(points),
         "total_observations": len(all_points),
         "gap_count": gap_count,

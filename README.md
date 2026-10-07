@@ -103,7 +103,8 @@ The current model predicts 1-hour PM2.5 using the previous hour, trailing 3-hour
 4. refits using only prior observations at every validation step and reports MAE plus relative skill beside a persistence baseline (the previous value);
 5. splits the held-out predictions into as many as four chronological periods, with at least five validation points per period, to expose whether performance is stable through time;
 6. derives each horizon's range from the 90th percentile of its walk-forward absolute errors when at least five are available; and
-7. refits on all eligible observations only after evaluation, for the displayed three-hour recursive estimate.
+7. refits on all eligible observations only after evaluation, for the displayed three-hour recursive estimate; and
+8. bounds recursive estimates and ranges to the same plausible PM2.5 domain enforced during ingestion.
 
 Sparse horizons fall back to an approximate residual-based range. Neither method captures weather, wind, fire, satellite, or policy information, and the result must not be interpreted as an NEA forecast. See [methodology notes](docs/methodology.md) for limitations and next experiments.
 

@@ -137,3 +137,24 @@ def test_regression_caps_chronological_validation_at_four_periods():
     assert result["validation_samples"] == 20
     assert len(result["validation_periods"]) == 4
     assert [period["samples"] for period in result["validation_periods"]] == [5, 5, 5, 5]
+
+
+def test_regression_bounds_explosive_forecasts_to_validated_pm25_range():
+    start = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    rows = [
+        {
+            "reading_timestamp": (start + timedelta(hours=index)).isoformat(),
+            "pm25_1h": 1000 + index * 50,
+        }
+        for index in range(20)
+    ]
+
+    result = regression_analysis(rows, horizon=3)
+
+    assert result["status"] == "ready"
+    assert result["forecast_bounds_pm25_1h"] == [0, 2000]
+    assert result["forecast"][0]["pm25_1h"] == 2000
+    assert all(
+        0 <= item["lower"] <= item["pm25_1h"] <= item["upper"] <= 2000
+        for item in result["forecast"]
+    )
