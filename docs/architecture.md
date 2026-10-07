@@ -8,7 +8,7 @@ The application uses a small number of components deliberately:
 4. React renders the dashboard and never receives the data.gov.sg API key.
 5. A multi-stage production container compiles the React application and serves it beside the Flask API through Gunicorn.
 
-The database stores both the provider's reading timestamp and update timestamp. A newer provider revision updates the matching region, observation time, and source in place, while an older revision cannot overwrite it. The latest query ranks observations independently within each region so a slightly delayed region is not dropped. Overall freshness uses the oldest of those five regional readings and reports missing regions explicitly.
+The database stores both the provider's reading timestamp and update timestamp. Within one provider batch, duplicate observations resolve to the newest update regardless of input order. A newer revision also updates the matching stored region, observation time, and source in place, while an older revision cannot overwrite it. The latest query ranks observations independently within each region so a slightly delayed region is not dropped. Overall freshness uses the oldest of those five regional readings and reports missing regions explicitly.
 
 Cache policy follows response semantics: forced refreshes, health checks, and errors are never stored; ordinary read-only API responses use a short stale-if-error window; and fingerprinted frontend assets can be cached immutably.
 

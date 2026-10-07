@@ -142,6 +142,32 @@ def test_cleaning_rejects_bad_region_and_deduplicates():
     assert report["rejected"] == 1
 
 
+def test_cleaning_keeps_newest_duplicate_revision_regardless_of_input_order():
+    original = {
+        "region": "central",
+        "reading_timestamp": "2026-09-29T01:00:00+08:00",
+        "updated_timestamp": "2026-09-29T01:05:00+08:00",
+        "psi_24h": 80,
+        "pm25_1h": 40,
+        "pm25_24h": 30,
+        "source": "test",
+    }
+    revision = {
+        **original,
+        "updated_timestamp": "2026-09-29T01:10:00+08:00",
+        "pm25_1h": 44,
+    }
+
+    forward, forward_report = clean_readings([original, revision])
+    reverse, reverse_report = clean_readings([revision, original])
+
+    assert forward == reverse
+    assert forward[0]["updated_timestamp"] == revision["updated_timestamp"]
+    assert forward[0]["pm25_1h"] == 44
+    assert forward_report["duplicates_removed"] == 1
+    assert reverse_report["duplicates_removed"] == 1
+
+
 def test_cleaning_compares_regional_spikes_at_the_same_timestamp():
     first_timestamp = "2026-09-29T01:00:00+08:00"
     second_timestamp = "2026-09-29T02:00:00+08:00"

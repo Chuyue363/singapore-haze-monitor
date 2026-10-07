@@ -36,7 +36,7 @@ def clean_readings(rows: list[dict]) -> tuple[list[dict], dict]:
     """Validate, normalise and annotate provider rows without hiding observations."""
     cleaned: list[dict] = []
     rejected: list[dict] = []
-    seen: set[tuple[str, str, str]] = set()
+    positions: dict[tuple[str, str, str], int] = {}
 
     for raw in rows:
         try:
@@ -57,9 +57,16 @@ def clean_readings(rows: list[dict]) -> tuple[list[dict], dict]:
             if all(row[field] is None for field in ("psi_24h", "pm25_1h", "pm25_24h")):
                 raise ValueError("row contains no air-quality measurements")
             key = (row["region"], row["reading_timestamp"], row["source"])
-            if key in seen:
+            if key in positions:
+                existing_index = positions[key]
+                existing_updated = datetime.fromisoformat(
+                    cleaned[existing_index]["updated_timestamp"]
+                )
+                incoming_updated = datetime.fromisoformat(row["updated_timestamp"])
+                if incoming_updated > existing_updated:
+                    cleaned[existing_index] = row
                 continue
-            seen.add(key)
+            positions[key] = len(cleaned)
             cleaned.append(row)
         except (KeyError, TypeError, ValueError) as exc:
             rejected.append({"reason": str(exc), "row": raw})
