@@ -54,6 +54,10 @@ def clean_readings(rows: list[dict]) -> tuple[list[dict], dict]:
                 "quality_status": "valid",
                 "quality_notes": "",
             }
+            reading_time = datetime.fromisoformat(row["reading_timestamp"])
+            updated_time = datetime.fromisoformat(row["updated_timestamp"])
+            if updated_time < reading_time:
+                raise ValueError("updated_timestamp cannot precede reading_timestamp")
             if all(row[field] is None for field in ("psi_24h", "pm25_1h", "pm25_24h")):
                 raise ValueError("row contains no air-quality measurements")
             key = (row["region"], row["reading_timestamp"], row["source"])

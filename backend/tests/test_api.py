@@ -168,6 +168,27 @@ def test_cleaning_keeps_newest_duplicate_revision_regardless_of_input_order():
     assert reverse_report["duplicates_removed"] == 1
 
 
+def test_cleaning_rejects_update_timestamp_before_observation():
+    cleaned, report = clean_readings([
+        {
+            "region": "central",
+            "reading_timestamp": "2026-09-29T01:00:00+08:00",
+            "updated_timestamp": "2026-09-29T00:59:00+08:00",
+            "psi_24h": 80,
+            "pm25_1h": 40,
+            "pm25_24h": 30,
+            "source": "test",
+        }
+    ])
+
+    assert cleaned == []
+    assert report["accepted"] == 0
+    assert report["rejected"] == 1
+    assert report["rejections"][0]["reason"] == (
+        "updated_timestamp cannot precede reading_timestamp"
+    )
+
+
 def test_cleaning_compares_regional_spikes_at_the_same_timestamp():
     first_timestamp = "2026-09-29T01:00:00+08:00"
     second_timestamp = "2026-09-29T02:00:00+08:00"
